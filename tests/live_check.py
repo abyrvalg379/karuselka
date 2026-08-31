@@ -147,7 +147,7 @@ props.camera = None
 before = target.matrix_world.translation.copy()
 r = bpy.ops.karuselka.create_rig()
 check("spin create FINISHED", r == {'FINISHED'}, r)
-spin = bpy.data.objects.get("Karuselka Spin")
+spin = bpy.data.objects.get("KARUSELKA_Empty")
 check("spin empty created", spin is not None and spin.get("karuselka") == 1)
 check("target parented to spin", target.parent is spin)
 check("target world position kept",
@@ -171,8 +171,32 @@ check("camera does not move in spin mode",
 r = bpy.ops.karuselka.remove_rig()
 check("spin remove FINISHED", r == {'FINISHED'}, r)
 check("spin rig fully removed",
-      bpy.data.objects.get("Karuselka Spin") is None
+      bpy.data.objects.get("KARUSELKA_Empty") is None
       and target.parent is None)
+props.mode = 'CAMERA_ORBIT'
+
+# spin with existing parent: the hierarchy root is parented, not the target
+anchor = bpy.data.objects.new("KarAnchor", None)
+scene.collection.objects.link(anchor)
+target.parent = anchor
+target.matrix_parent_inverse = anchor.matrix_world.inverted()
+props.mode = 'OBJECT_SPIN'
+bpy.ops.karuselka.create_rig()
+spin = bpy.data.objects.get("KARUSELKA_Empty")
+check("spin+parent: empty created", spin is not None)
+check("spin+parent: hierarchy root parented to empty", anchor.parent is spin)
+check("spin+parent: target keeps its own parent", target.parent is anchor)
+before_t = target.matrix_world.translation.copy()
+q_a = target.matrix_world.to_quaternion()
+scene.frame_set(60)
+q_b = target.matrix_world.to_quaternion()
+check("spin+parent: target rotates via its root",
+      (target.matrix_world.translation - before_t).length < 1e-5
+      and q_a.rotation_difference(q_b).angle > 0.1)
+bpy.ops.karuselka.remove_rig()
+check("spin+parent: root freed on remove", anchor.parent is None)
+check("spin+parent: target still under its parent", target.parent is anchor)
+bpy.data.objects.remove(anchor, do_unlink=True)
 props.mode = 'CAMERA_ORBIT'
 
 # ---------------------------------------------------------------- keep settings

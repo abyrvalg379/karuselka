@@ -663,7 +663,7 @@ op = ns["KR_OT_create_rig"]()
 op.report = lambda t, m: None
 rv = op.execute(bpy.context)
 check("spin create FINISHED", rv == {'FINISHED'})
-spin = db.get("Karuselka Spin")
+spin = db.get("KARUSELKA_Empty")
 check("spin empty created+marked", spin is not None and spin.get("karuselka") == 1)
 check("spin at bbox center", spin.location.xyz == (3.0, -1.0, 2.0),
       str(spin.location))
@@ -684,12 +684,33 @@ check("scene.camera is spin rig camera", _scene.camera is cam)
 # rebuild in orbit mode sweeps the spin rig and restores the target
 props.mode = 'CAMERA_ORBIT'
 op.execute(bpy.context)
-check("mode switch: spin removed", db.get("Karuselka Spin") is None)
+check("mode switch: spin removed", db.get("KARUSELKA_Empty") is None)
 check("mode switch: pivot created", db.get("Karuselka Pivot") is not None)
 check("mode switch: target unparented", target.parent is None)
 cam2 = db.get("Karuselka Cam")
 check("mode switch: fresh camera orbits again",
       cam2 is not None and cam2 is not cam and cam2.parent is db.get("Karuselka Pivot"))
+
+# spin with existing parent: the hierarchy root is parented, not the target
+reset()
+target = make_target("Child", translation=(2.0, 0.0, 0.0))
+par = db.new("Hierarchy Root", None)
+_scene.collection.objects.link(par)
+target.parent = par
+props = fresh_props(target)
+props.mode = 'OBJECT_SPIN'
+op = ns["KR_OT_create_rig"]()
+op.report = lambda t, m: None
+op.execute(bpy.context)
+spin = db.get("KARUSELKA_Empty")
+check("spin+parent: empty created", spin is not None)
+check("spin+parent: hierarchy root parented to empty", par.parent is spin)
+check("spin+parent: target keeps its own parent", target.parent is par)
+op_rm = ns["KR_OT_remove_rig"]()
+op_rm.report = lambda t, m: None
+op_rm.execute(bpy.context)
+check("spin+parent: root freed on remove", par.parent is None)
+check("spin+parent: target still under its parent", target.parent is par)
 
 # ---------------------------------------------------------------- render
 reset()

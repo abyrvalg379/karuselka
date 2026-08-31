@@ -11,7 +11,9 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 
 - One click: rig + keyframes, live immediately
 - Two modes: **Camera** orbits the object, or **Object** spins on its axis
-  with a static camera
+  with a static camera. In Object mode the model's hierarchy root is parented
+  to a `KARUSELKA_Empty` (if the target already has a parent, that parent
+  chain root is used); Remove Rig restores the hierarchy
 - The rig camera becomes the active scene camera (Numpad 0 / render);
   Remove Rig puts your previous active camera back
 - Constant rotation speed — interpolation is forced to LINEAR
@@ -60,8 +62,8 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 
 ### Notes
 
-- Object Spin temporarily parents the target to a spin empty; Remove Rig
-  unparents it again with the world transform preserved.
+- Object Spin parents the model's hierarchy root to a `KARUSELKA_Empty`;
+  Remove Rig unparents it again with the world transform preserved.
 - Render Turntable sets the scene frame range to `1..N` and leaves it visible
   in the timeline; engine, samples and format settings are not touched.
 - With your own camera KARUSELKA aims it and (in Camera mode) parents it to

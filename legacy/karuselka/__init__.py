@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 1, 0),
+    "version": (1, 1, 1),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
@@ -30,7 +30,7 @@ from bpy.props import (
 from bpy.types import Operator, Panel, PropertyGroup
 
 PIVOT_NAME = "Karuselka Pivot"
-SPIN_NAME = "Karuselka Spin"
+SPIN_NAME = "KARUSELKA_Empty"
 CAM_NAME = "Karuselka Cam"
 TRACK_NAME = "Karuselka Track"
 MARKER = "karuselka"          # custom prop = 1 on everything the rig owns
@@ -336,16 +336,20 @@ class KR_OT_create_rig(Operator):
         angle = turn_end_angle(props.rounds, props.direction)
 
         if props.mode == 'OBJECT_SPIN':
-            # object spins: static camera, keyframes on the spin empty
+            # rotate the top of the target's hierarchy: with an existing
+            # parent, the parent chain root is parented instead of the target
+            root = target
+            while root.parent is not None:
+                root = root.parent
+
             rot_obj = bpy.data.objects.new(SPIN_NAME, None)
             rot_obj.empty_display_type = 'PLAIN_AXES'
             context.scene.collection.objects.link(rot_obj)
             rot_obj[MARKER] = 1
             rot_obj.location = center
 
-            mw = target.matrix_world.copy()
-            target.parent = rot_obj
-            target.matrix_parent_inverse = rot_obj.matrix_world.inverted()
+            root.parent = rot_obj
+            root.matrix_parent_inverse = rot_obj.matrix_world.inverted()
 
             cam = props.camera
             if cam is None:
