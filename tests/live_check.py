@@ -289,6 +289,22 @@ bpy.data.collections.remove(coll)
 props.collection = None
 props.mode = 'CAMERA_ORBIT'
 
+# ---------------------------------------------------------------- 3D cursor center
+scene.cursor.location = (6.0, 1.0, 1.0)
+props.center = 'CURSOR'
+props.camera = None
+r = bpy.ops.karuselka.create_rig()
+pivot_c = bpy.data.objects.get("Karuselka Pivot")
+check("cursor center: pivot at cursor",
+      r == {'FINISHED'} and pivot_c is not None
+      and (pivot_c.location - mathutils.Vector((6.0, 1.0, 1.0))).length < 1e-5,
+      tuple(round(v, 3) for v in pivot_c.location) if pivot_c else None)
+cur_cam = props.camera
+check("cursor center: camera follows the pivot",
+      cur_cam is not None and cur_cam.parent is pivot_c)
+bpy.ops.karuselka.remove_rig()
+props.center = 'BOUNDS'
+
 mod.unregister()
 check("unregister ok", not hasattr(bpy.types.Scene, "karuselka"))
 

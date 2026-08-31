@@ -62,6 +62,9 @@ class FakeVec:
     def __neg__(self):
         return FakeVec([-a for a in self.xyz])
 
+    def copy(self):
+        return FakeVec(self.xyz)
+
     def __mul__(self, s):
         return FakeVec([a * s for a in self.xyz])
 
@@ -266,6 +269,7 @@ class FakeScene:
         self.frame_end = 250
         self.frame_set_calls = []
         self.camera = None
+        self.cursor = types.SimpleNamespace(location=FakeVec())
         self.render = types.SimpleNamespace(filepath="/tmp/render/", fps=24)
 
     @property
@@ -436,6 +440,9 @@ check("timing props retime the rig live",
 check("placement props move the camera live",
       all(PROP_KW[n].get("update") is ns["_update_rig_placement"]
           for n in ("Radius", "Margin", "Height")))
+check("center prop retargets the rig live",
+      PROP_KW["Center"].get("update") is ns["_update_rig_center"]
+      and [i[0] for i in PROP_KW["Center"]["items"]] == ["BOUNDS", "CURSOR"])
 
 # ---------------------------------------------------------------- scene glue
 def fresh_props(target=None):
@@ -866,6 +873,35 @@ check("helpers: center ignores empties",
       and tuple(round(v, 3) for v in spin.location.xyz) == (3.0, 0.0, 0.0),
       str(spin.location.xyz))
 check("helpers: empty root still spins along", helper.parent is spin)
+
+# ---------------------------------------------------------------- 3D cursor center
+reset()
+target = make_target("CursorTarget", translation=(3.0, -1.0, 2.0))
+props = fresh_props(target)
+props.mode = 'OBJECT_SPIN'
+props.center = 'CURSOR'
+_scene.cursor.location = FakeVec((10.0, 5.0, 2.0))
+op = ns["KR_OT_create_rig"]()
+op.report = lambda t, m: None
+rv = op.execute(bpy.context)
+spin = db.get("KARUSELKA_Empty")
+check("cursor center: create FINISHED", rv == {'FINISHED'})
+check("cursor center: empty at cursor",
+      spin is not None and spin.location.xyz == (10.0, 5.0, 2.0),
+      str(spin.location.xyz))
+check("cursor center: target world kept",
+      target.matrix_parent_inverse.t.xyz == (-10.0, -5.0, -2.0),
+      str(target.matrix_parent_inverse.t))
+props.center = 'BOUNDS'
+ns["_update_rig_center"](props, bpy.context)
+check("center switch: empty back to bounds center",
+      spin.location.xyz == (3.0, -1.0, 2.0), str(spin.location.xyz))
+check("center switch: target world still kept",
+      target.matrix_parent_inverse.t.xyz == (-3.0, 1.0, -2.0),
+      str(target.matrix_parent_inverse.t))
+op_rm = ns["KR_OT_remove_rig"]()
+op_rm.report = lambda t, m: None
+op_rm.execute(bpy.context)
 
 # ---------------------------------------------------------------- render
 reset()

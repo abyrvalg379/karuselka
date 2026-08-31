@@ -25,7 +25,8 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
   right up against the model
 - Camera settings right in the panel: Lens, DoF, near/far clip (Blender
   defaults) — edits apply to the rig camera live
-- Radius/Margin/Height move the camera live too
+- Radius/Margin/Height move the camera live too; **Center** = Bounds
+  or the 3D cursor as the rotation center
 - Frames/Rounds/Dir edits retime the rig live: the last keyframe slides to
   the new end and the timeline follows — no rebuild needed
 - Every Create Rig starts from fresh defaults; the **Keep Settings**
@@ -59,6 +60,7 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 | Camera | yours, or auto-created |
 | Frames | frames per full revolution; fps comes from the scene |
 | Rounds | revolutions, fractional allowed |
+| Center | rotation center: scope bounds middle or the 3D cursor |
 | Radius | orbit distance; 0 = auto (scope size × Margin) |
 | Margin | auto-radius multiplier (default 2.5) |
 | Height | camera height relative to the object center |

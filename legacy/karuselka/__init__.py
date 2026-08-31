@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 2, 1),
+    "version": (1, 2, 2),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
@@ -246,19 +246,57 @@ def _update_rig_placement(self, context):
     empties = find_marked_empties(scene)
     if not empties:
         return
-    scope = _scope_objects(props)
-    if props.radius > 0.0:
-        radius = props.radius
-    elif scope:
-        radius = auto_radius(combined_bounds(scope)[1], props.margin)
-    else:
-        # target cleared/deleted — fall back to the radius used at create
-        radius = props.get("last_radius", 0.0) or DEFAULT_RADIUS
+    radius = _effective_radius(props)
     center = empties[0].location    # pivot/spin sits at the rotation center
     if cam.parent is not None:      # orbit: location is pivot-local
         cam.location = (radius, 0.0, props.height)
     else:                           # spin: camera is unparented = world space
         cam.location = center + Vector((radius, 0.0, props.height))
+
+
+def _effective_radius(props):
+    if props.radius > 0.0:
+        return props.radius
+    scope = _scope_objects(props)
+    if scope:
+        return auto_radius(combined_bounds(scope)[1], props.margin)
+    return props.get("last_radius", 0.0) or DEFAULT_RADIUS
+
+
+def _resolve_center(props, scene):
+    """Rotation center: middle of the scope's bounding box or the 3D cursor."""
+    if props.center == 'CURSOR' and scene is not None:
+        return scene.cursor.location.copy()
+    scope = _scope_objects(props)
+    if scope:
+        return combined_bounds(scope)[0]
+    return Vector((0.0, 0.0, 0.0))
+
+
+def _update_rig_center(self, context):
+    """Center edits move the pivot/spin empty live. Spin-mode roots keep
+    their world transform (only the rotation axis moves); the orbit camera
+    follows its pivot."""
+    scene = context.scene if context else None
+    props = getattr(scene, "karuselka", None) if scene else None
+    if props is None or scene is None:
+        return
+    empties = find_marked_empties(scene)
+    if not empties:
+        return
+    empty = empties[0]
+    cam = props.camera
+    new_center = _resolve_center(props, scene)
+    children = [(c, c.matrix_world.copy()) for c in empty.children
+                if c != cam]
+    empty.location = new_center
+    for child, mw in children:
+        child.matrix_parent_inverse = Matrix.Translation(-new_center)
+        child.matrix_world = mw
+    # spin-mode camera is unparented at center + offset — move it too
+    if cam is not None and cam.type == 'CAMERA' and cam.parent is None:
+        cam.location = new_center + Vector((_effective_radius(props),
+                                            0.0, props.height))
 
 
 def _poll_camera(_self, obj):
@@ -306,6 +344,17 @@ class KR_SceneSettings(PropertyGroup):
         min=0.1,
         soft_max=10.0,
         update=_update_rig_timing,
+    )
+    center: EnumProperty(
+        name="Center",
+        description="Rotation center: middle of the scope's bounding box "
+                    "or the 3D cursor",
+        items=(
+            ('BOUNDS', "Bounds", "Middle of the scope's bounding box"),
+            ('CURSOR', "3D Cursor", "The 3D cursor sets the rotation center"),
+        ),
+        default='BOUNDS',
+        update=_update_rig_center,
     )
     radius: FloatProperty(
         name="Radius",
@@ -429,10 +478,12 @@ class KR_OT_create_rig(Operator):
         # one rig at a time: drop the previous one (markers only)
         _remove_rig_objects(context)
 
+        center, dims = combined_bounds(scope)
         radius = (props.radius if props.radius > 0.0
-                  else auto_radius(combined_bounds(scope)[1], props.margin))
+                  else auto_radius(dims, props.margin))
         props["last_radius"] = radius    # placement fallback if scope goes away
-        center, _ = combined_bounds(scope)
+        if props.center == 'CURSOR':
+            center = context.scene.cursor.location.copy()
 
         if prev is not None:
             lens, dof = prev["lens"], prev["dof"]
@@ -618,6 +669,7 @@ class KR_PT_main_panel(Panel):
         col.separator()
         col.prop(props, "frames")
         col.prop(props, "rounds")
+        col.prop(props, "center")
         col.prop(props, "radius")
         col.prop(props, "margin")
         col.prop(props, "height")
