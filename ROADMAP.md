@@ -5,13 +5,16 @@
 > Юзкейс: шоурилы моделей — «пресет света (LAMPOCHKA v3.1) + турнтейбл =
 > шоурил за две минуты».
 
-## Статус: старт разработки (сессия #1)
+## Статус: v1.0.0 реализована (2026-08-31, коммит f5e8899)
 
-Реализовать v1.0.0 по дизайну ниже. Паттерны и структура — как LAMPOCHKA
-(`D:\AI\ZCode\Project\LAMPOCHKA\work`): extension (manifest, Blender 4.2+)
-+ legacy (bl_info, 3.6+), мок-тесты без Blender, docs EN+RU, zips в
-`out/v<версия>/`. Лицензия GPL-3.0-or-later, © Maksim Kovalev. Скилл
-blender-addon доступен в сессии.
+Сделано по дизайну ниже. Сборка — `python build.py` (генерит legacy с bl_info
++ оба zip в `out/v1.0.0/`, копирует README/LICENSE). Тесты: `tests/test_mock.py`
+(83 проверки, py3.14, без Blender) + `tests/live_check.py` (headless в живом
+Blender 5.2, 0 failed — там же поймано отсутствие `Action.fcurves` в 4.4+/
+slotted actions, обход через layers/strips/channelbags в `_action_fcurves`).
+Кандидаты после v1.0.0 — в конце файла.
+
+Реализация (сессия #1, стартовая):
 
 ## Дизайн v1.0.0 (утверждён)
 
