@@ -101,6 +101,9 @@ class FakeFCurve:
         self.index = index
         self.keyframe_points = []
 
+    def update(self):
+        pass
+
 
 class FakeFCurves(list):
     def _get_or_create(self, data_path, index):
@@ -409,6 +412,9 @@ check("keep_settings default off", KR_SceneSettings.keep_settings is False)
 check("camera settings have live update",
       all(PROP_KW[n].get("update") is ns["_apply_camera_settings"]
           for n in ("Lens", "DoF", "Clip Start", "Clip End")))
+check("timing props retime the rig live",
+      all(PROP_KW[n].get("update") is ns["_update_rig_timing"]
+          for n in ("Frames", "Rounds", "Dir")))
 
 # ---------------------------------------------------------------- scene glue
 def fresh_props(target=None):
@@ -655,6 +661,38 @@ props.clip_start = 0.2
 ns["_apply_camera_settings"](props, bpy.context)
 check("panel apply -> live camera", cam.data.lens == 85.0
       and cam.data.clip_start == 0.2, (cam.data.lens, cam.data.clip_start))
+
+# timing edits retime the rig and the timeline live
+pivot = db.get("Karuselka Pivot")
+fc = z_fcurve(pivot)
+props.frames = 250
+ns["_update_rig_timing"](props, bpy.context)
+check("retime: last key slid to 250",
+      tuple(fc.keyframe_points[-1].co) == (250.0, -TAU),
+      str(tuple(fc.keyframe_points[-1].co)))
+check("retime: first key stays",
+      tuple(fc.keyframe_points[0].co) == (1.0, 0.0),
+      str(tuple(fc.keyframe_points[0].co)))
+check("retime: keys stay LINEAR",
+      all(k.interpolation == 'LINEAR' for k in fc.keyframe_points))
+check("retime: timeline follows",
+      (_scene.frame_start, _scene.frame_end) == (1, 250),
+      str((_scene.frame_start, _scene.frame_end)))
+props.rounds = 2.0
+ns["_update_rig_timing"](props, bpy.context)
+check("retime: rounds doubles length and angle",
+      tuple(fc.keyframe_points[-1].co) == (500.0, -2 * TAU)
+      and (_scene.frame_start, _scene.frame_end) == (1, 500),
+      str(tuple(fc.keyframe_points[-1].co)))
+props.frames, props.rounds = 120, 1.0
+ns["_update_rig_timing"](props, bpy.context)
+props2 = KR_SceneSettings()
+_scene.karuselka = props2
+try:
+    ns["_update_rig_timing"](props2, bpy.context)
+    check("retime without rig: no crash", True)
+except Exception:
+    check("retime without rig: no crash", False, traceback.format_exc())
 
 # ---------------------------------------------------------------- spin mode
 reset()

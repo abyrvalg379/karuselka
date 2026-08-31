@@ -22,6 +22,8 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
   right up against the model
 - Camera settings right in the panel: Lens, DoF, near/far clip — edits
   apply to the rig camera live
+- Frames/Rounds/Dir edits retime the rig live: the last keyframe slides to
+  the new end and the timeline follows — no rebuild needed
 - Every Create Rig starts from fresh defaults; the **Keep Settings**
   checkbox reuses the previous camera's lens/DoF/clips instead
 - Auto near/far clip at a fixed 1000:1 ratio — small and huge models

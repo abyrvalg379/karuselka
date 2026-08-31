@@ -101,6 +101,23 @@ to_pivot = (pivot.matrix_world.translation - cam.matrix_world.translation).norma
 check("camera aims at the pivot", view.dot(to_pivot) > 0.999,
       round(view.dot(to_pivot), 5))
 
+# frames edit in the panel retimes the rig and the timeline live
+props.frames = 250
+check("frames edit retimes timeline", scene.frame_end == 250, scene.frame_end)
+fcl = mod._action_fcurves(pivot.animation_data.action).find(
+    "rotation_euler", index=2)
+lastk = fcl.keyframe_points[-1]
+check("last keyframe slid to 250",
+      abs(lastk.co[0] - 250.0) < 1e-5 and abs(lastk.co[1] + math.tau) < 1e-4
+      and lastk.interpolation == 'LINEAR',
+      [tuple(round(v, 3) for v in k.co) for k in fcl.keyframe_points])
+scene.frame_set(125)
+pmid = cam.matrix_world.translation.copy()
+scene.frame_set(1)
+check("orbit spans the new range", (pmid - cam.matrix_world.translation).length > 0.01)
+props.frames = 120
+check("timeline back to 120", scene.frame_end == 120, scene.frame_end)
+
 r = bpy.ops.karuselka.remove_rig()
 check("remove FINISHED", r == {'FINISHED'}, r)
 check("scene cleaned",

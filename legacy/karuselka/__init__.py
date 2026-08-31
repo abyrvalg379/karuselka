@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 1, 2),
+    "version": (1, 1, 3),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
@@ -171,6 +171,35 @@ def _remove_rig_objects(context):
 #  Properties
 # ---------------------------------------------------------------------------
 
+def _update_rig_timing(self, context):
+    """Frames/Rounds/Direction edits retime the existing rig live: the last
+    keyframe slides to the new end and the timeline follows."""
+    scene = context.scene if context else None
+    props = getattr(scene, "karuselka", None) if scene else None
+    if props is None or scene is None:
+        return
+    rot_obj = None
+    for e in find_marked_empties(scene):
+        ad = e.animation_data
+        if ad is not None and ad.action is not None:
+            rot_obj = e
+            break
+    if rot_obj is None:
+        return
+    fcurves = _action_fcurves(rot_obj.animation_data.action)
+    fc = fcurves.find("rotation_euler", index=2) if fcurves else None
+    if fc is None or not fc.keyframe_points:
+        return
+    end_f = turn_end_frame(props.frames, props.rounds)
+    fc.keyframe_points[-1].co = (float(end_f),
+                                 turn_end_angle(props.rounds, props.direction))
+    for kp in fc.keyframe_points:
+        kp.interpolation = 'LINEAR'
+    fc.update()
+    scene.frame_start = 1
+    scene.frame_end = end_f
+
+
 def _poll_camera(_self, obj):
     return obj.type == 'CAMERA'
 
@@ -201,6 +230,7 @@ class KR_SceneSettings(PropertyGroup):
         description="Frames per full revolution (fps is taken from the scene)",
         default=120,
         min=2,
+        update=_update_rig_timing,
     )
     rounds: FloatProperty(
         name="Rounds",
@@ -208,6 +238,7 @@ class KR_SceneSettings(PropertyGroup):
         default=1.0,
         min=0.1,
         soft_max=10.0,
+        update=_update_rig_timing,
     )
     radius: FloatProperty(
         name="Radius",
@@ -237,6 +268,7 @@ class KR_SceneSettings(PropertyGroup):
             ('CCW', "CCW", "Counter-clockwise when viewed from above"),
         ),
         default='CW',
+        update=_update_rig_timing,
     )
     lens: FloatProperty(
         name="Lens",
