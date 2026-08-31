@@ -1,0 +1,15 @@
+schema_version = "1.0.0"
+
+id = "karuselka"
+version = "1.0.0"
+name = "KARUSELKA"
+tagline = "Fast camera turntable rig for model showreels"
+maintainer = "Maksim Kovalev <maksim@example.com>"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+files = "Write rendered turntable frames to disk"
