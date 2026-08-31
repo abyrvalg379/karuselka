@@ -24,7 +24,7 @@ BL_INFO = '''bl_info = {
     "version": (%VERSION%),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
-    "description": "Fast camera turntable rig: orbit camera + linear keyframes + animation render",
+    "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
     "doc_url": "https://github.com/abyrvalg379/karuselka",
     "license": "GPL-3.0-or-later",
     "category": "Animation",

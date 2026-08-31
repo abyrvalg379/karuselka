@@ -68,8 +68,8 @@ check("scene.camera is the rig camera", scene.camera is cam,
 check("previous active camera remembered", props.get("prev_camera") == "Camera",
       props.get("prev_camera"))
 check("clips sized to orbit (1000:1)",
-      abs(cam.data.clip_start - 0.03) < 1e-6
-      and abs(cam.data.clip_end - 30.0) < 1e-6, (cam.data.clip_start, cam.data.clip_end))
+      abs(cam.data.clip_start - 0.05) < 1e-6
+      and abs(cam.data.clip_end - 50.0) < 1e-6, (cam.data.clip_start, cam.data.clip_end))
 
 fc = mod._action_fcurves(pivot.animation_data.action).find("rotation_euler", index=2)
 check("z fcurve 2 keys", fc is not None and len(fc.keyframe_points) == 2)
@@ -139,6 +139,62 @@ check("scene cleaned again",
 check("scene.camera restored to the original",
       scene.camera is bpy.data.objects.get("Camera"),
       scene.camera.name if scene.camera else None)
+
+# ---------------------------------------------------------------- object spin
+scene.frame_set(1)
+props.mode = 'OBJECT_SPIN'
+props.camera = None
+before = target.matrix_world.translation.copy()
+r = bpy.ops.karuselka.create_rig()
+check("spin create FINISHED", r == {'FINISHED'}, r)
+spin = bpy.data.objects.get("Karuselka Spin")
+check("spin empty created", spin is not None and spin.get("karuselka") == 1)
+check("target parented to spin", target.parent is spin)
+check("target world position kept",
+      (target.matrix_world.translation - before).length < 1e-5)
+cam_s = bpy.data.objects.get("Karuselka Cam")
+check("spin camera static (unparented)", cam_s.parent is None)
+scene.frame_set(1)
+t1, c1 = target.matrix_world.copy(), cam_s.matrix_world.translation.copy()
+scene.frame_set(31)
+t31, c31 = target.matrix_world.copy(), cam_s.matrix_world.translation.copy()
+scene.frame_set(61)
+t61, c61 = target.matrix_world.copy(), cam_s.matrix_world.translation.copy()
+a1 = t1.to_quaternion().rotation_difference(t31.to_quaternion()).angle
+a2 = t31.to_quaternion().rotation_difference(t61.to_quaternion()).angle
+# quaternion double-cover: normalize to the shortest arc
+a1, a2 = min(a1, 2 * math.pi - a1), min(a2, 2 * math.pi - a2)
+check("object rotates at constant speed", a1 > 0.1 and abs(a1 - a2) < 1e-3,
+      (a1, a2))
+check("camera does not move in spin mode",
+      (c31 - c1).length < 1e-5 and (c61 - c31).length < 1e-5)
+r = bpy.ops.karuselka.remove_rig()
+check("spin remove FINISHED", r == {'FINISHED'}, r)
+check("spin rig fully removed",
+      bpy.data.objects.get("Karuselka Spin") is None
+      and target.parent is None)
+props.mode = 'CAMERA_ORBIT'
+
+# ---------------------------------------------------------------- keep settings
+props.keep_settings = True
+bpy.ops.karuselka.create_rig()
+bpy.data.objects["Karuselka Cam"].data.lens = 85.0
+bpy.data.objects["Karuselka Cam"].data.clip_start = 0.2
+bpy.ops.karuselka.create_rig()
+check("keep: lens survives rebuild",
+      bpy.data.objects["Karuselka Cam"].data.lens == 85.0)
+check("keep: clips survive rebuild",
+      abs(bpy.data.objects["Karuselka Cam"].data.clip_start - 0.2) < 1e-6)
+props.keep_settings = False
+bpy.ops.karuselka.create_rig()
+check("no-keep: lens back to default",
+      bpy.data.objects["Karuselka Cam"].data.lens == 50.0)
+
+# panel edits push into the rig camera (update callback)
+props.lens = 65.0
+check("panel lens edit -> live camera",
+      bpy.data.objects["Karuselka Cam"].data.lens == 65.0)
+bpy.ops.karuselka.remove_rig()
 
 mod.unregister()
 check("unregister ok", not hasattr(bpy.types.Scene, "karuselka"))

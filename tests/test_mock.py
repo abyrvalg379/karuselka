@@ -88,6 +88,13 @@ class FakeMatrix:
         return FakeMatrix(self.t.xyz)
 
 
+    def inverted(self):
+        return FakeMatrix([-v for v in self.t.xyz])
+
+    def __eq__(self, other):
+        return isinstance(other, FakeMatrix) and self.t.xyz == other.t.xyz
+
+
 class FakeFCurve:
     def __init__(self, data_path, index):
         self.data_path = data_path
@@ -141,11 +148,24 @@ class FakeObj:
         self.bound_box = [(-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1),
                           (-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)]
         self.dimensions = FakeVec((2.0, 2.0, 2.0))
-        self.parent = None
+        self._parent = None
+        self.children = []
         self.matrix_parent_inverse = FakeMatrix()
         self.constraints = FakeConstraints()
         self.empty_display_type = 'PLAIN_AXES'
         self._anim = None
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @parent.setter
+    def parent(self, val):
+        if self._parent is not None and self in self._parent.children:
+            self._parent.children.remove(self)
+        self._parent = val
+        if val is not None and self not in val.children:
+            val.children.append(self)
 
     def get(self, key, default=None):
         return self._props.get(key, default)
@@ -209,6 +229,11 @@ class FakeObjCollection:
     def __len__(self):
         return len(self._items)
 
+    def __contains__(self, key):
+        if isinstance(key, str):
+            return key in self._items
+        return any(ob is key for ob in self._items.values())
+
 
 class FakeSceneCollection:
     def __init__(self):
@@ -226,7 +251,7 @@ class FakeScene:
 
     @property
     def objects(self):
-        return list(self.collection.objects)
+        return self.collection.objects
 
     def frame_set(self, frame):
         self.frame_set_calls.append(frame)
@@ -374,6 +399,16 @@ check("camera poll filters CAMERA type",
       PROP_KW["Camera"].get("poll") is ns["_poll_camera"]
       and ns["_poll_camera"](None, types.SimpleNamespace(type='CAMERA'))
       and not ns["_poll_camera"](None, types.SimpleNamespace(type='MESH')))
+check("mode default CAMERA_ORBIT", _anns["mode"] == "CAMERA_ORBIT")
+check("mode items Camera/Object",
+      [i[0] for i in PROP_KW["Mode"]["items"]] == ["CAMERA_ORBIT", "OBJECT_SPIN"])
+check("margin default 2.5", KR_SceneSettings.margin == 2.5)
+check("lens default 50", KR_SceneSettings.lens == 50.0)
+check("use_dof default off", KR_SceneSettings.use_dof is False)
+check("keep_settings default off", KR_SceneSettings.keep_settings is False)
+check("camera settings have live update",
+      all(PROP_KW[n].get("update") is ns["_apply_camera_settings"]
+          for n in ("Lens", "DoF", "Clip Start", "Clip End")))
 
 # ---------------------------------------------------------------- scene glue
 def fresh_props(target=None):
@@ -425,11 +460,12 @@ check("bbox center follows matrix", (center.x, center.y, center.z) == (5.0, 0.0,
       str(center))
 
 cube.dimensions = FakeVec((2.0, 2.0, 2.0))
-check("auto radius 2m cube -> 3.0", ns["auto_radius"](cube) == 3.0)
+check("auto radius 2m cube x1.5 -> 3.0", ns["auto_radius"](cube, 1.5) == 3.0)
+check("auto radius default margin 2.5 -> 5.0", ns["auto_radius"](cube, 2.5) == 5.0)
 cube.dimensions = FakeVec((1.0, 4.0, 2.0))
-check("auto radius max dim", ns["auto_radius"](cube) == 6.0)
+check("auto radius max dim x2.5", ns["auto_radius"](cube, 2.5) == 10.0)
 cube.dimensions = FakeVec((0.0, 0.0, 0.0))
-check("auto radius zero dims fallback", ns["auto_radius"](cube) == ns["DEFAULT_RADIUS"])
+check("auto radius zero dims fallback", ns["auto_radius"](cube, 2.5) == ns["DEFAULT_RADIUS"])
 
 # ---------------------------------------------------------------- create rig
 reset()
@@ -453,14 +489,17 @@ check("camera created", cam is not None and cam.type == 'CAMERA')
 check("camera marked", cam.get("karuselka") == 1)
 check("camera lens 50", cam.data.lens == 50.0)
 check("camera dof off", cam.data.dof.use_dof is False)
-check("clips sized to orbit", cam.data.clip_start == 0.03
-      and cam.data.clip_end == 30.0,
+check("clips sized to orbit", cam.data.clip_start == 0.05
+      and cam.data.clip_end == 50.0,
       (cam.data.clip_start, cam.data.clip_end))
+check("panel clips synced to computed", props.clip_start == 0.05
+      and props.clip_end == 50.0)
 check("scene.camera set to rig camera", _scene.camera is cam)
 check("prev_camera empty (scene had none)", props.get("prev_camera") == "")
 check("camera parented to pivot", cam.parent is pivot)
-check("camera at auto radius (3,0,0)",
-      tuple(cam.location) == (3.0, 0.0, 0.0), str(tuple(cam.location)))
+check("camera at auto radius (5,0,0)",
+      tuple(cam.location) == (5.0, 0.0, 0.0), str(tuple(cam.location)))
+check("camera lens from props", cam.data.lens == props.lens)
 
 check("camera has 1 constraint", len(cam.constraints) == 1,
       str([c.type for c in cam.constraints]))
@@ -530,8 +569,8 @@ check("user camera stale parent_inverse reset",
       user_cam.matrix_parent_inverse.t.xyz == (0.0, 0.0, 0.0),
       str(user_cam.matrix_parent_inverse.t))
 check("user camera placed at radius/height",
-      tuple(user_cam.location) == (3.0, 0.0, 0.0), str(tuple(user_cam.location)))
-check("user camera lens untouched", user_cam.data.lens == 85.0)
+      tuple(user_cam.location) == (5.0, 0.0, 0.0), str(tuple(user_cam.location)))
+check("user camera lens set from defaults", user_cam.data.lens == 50.0)
 check("user camera got track constraint",
       any(c.name == "Karuselka Track" for c in user_cam.constraints))
 check("old constraint kept",
@@ -583,6 +622,74 @@ check("remove own rig FINISHED", rv == {'FINISHED'})
 check("own camera deleted", db.get("Karuselka Cam") is None)
 check("own pivot deleted", db.get("Karuselka Pivot") is None)
 check("scene.camera restored (was none)", _scene.camera is None)
+
+# ---------------------------------------------------------------- keep settings
+reset()
+target = make_target()
+props = fresh_props(target)
+props.keep_settings = True
+op = ns["KR_OT_create_rig"]()
+op.report = lambda t, m: None
+op.execute(bpy.context)
+cam = db.get("Karuselka Cam")
+cam.data.lens = 85.0
+cam.data.clip_start = 0.2
+op.execute(bpy.context)          # rebuild: inherit from previous camera
+cam = db.get("Karuselka Cam")
+check("keep: lens inherited", cam.data.lens == 85.0, str(cam.data.lens))
+check("keep: clips inherited", cam.data.clip_start == 0.2, str(cam.data.clip_start))
+props.keep_settings = False
+op.execute(bpy.context)          # rebuild: back to defaults
+cam = db.get("Karuselka Cam")
+check("no-keep: lens back to default", cam.data.lens == 50.0, str(cam.data.lens))
+check("no-keep: clips recomputed", abs(cam.data.clip_start - 0.05) < 1e-6,
+      str(cam.data.clip_start))
+check("no-keep: panel fields synced", props.lens == 50.0
+      and abs(props.clip_start - 0.05) < 1e-6)
+
+# panel "apply" callback pushes settings into the rig camera
+props.lens = 85.0
+props.clip_start = 0.2
+ns["_apply_camera_settings"](props, bpy.context)
+check("panel apply -> live camera", cam.data.lens == 85.0
+      and cam.data.clip_start == 0.2, (cam.data.lens, cam.data.clip_start))
+
+# ---------------------------------------------------------------- spin mode
+reset()
+target = make_target("Spinner", translation=(3.0, -1.0, 2.0))
+props = fresh_props(target)
+props.mode = 'OBJECT_SPIN'
+op = ns["KR_OT_create_rig"]()
+op.report = lambda t, m: None
+rv = op.execute(bpy.context)
+check("spin create FINISHED", rv == {'FINISHED'})
+spin = db.get("Karuselka Spin")
+check("spin empty created+marked", spin is not None and spin.get("karuselka") == 1)
+check("spin at bbox center", spin.location.xyz == (3.0, -1.0, 2.0),
+      str(spin.location))
+check("target parented to spin", target.parent is spin)
+check("target world kept via parent_inverse",
+      target.matrix_parent_inverse == spin.matrix_world.inverted())
+check("no pivot in spin mode", db.get("Karuselka Pivot") is None)
+cam = db.get("Karuselka Cam")
+check("spin camera is static (unparented)", cam.parent is None)
+check("spin camera at center+radius",
+      cam.location.xyz == (8.0, -1.0, 2.0), str(cam.location))
+check("spin camera aims at spin", cam.constraints[0].target is spin)
+fc = z_fcurve(spin)
+check("spin keys 2 LINEAR", fc is not None and len(fc.keyframe_points) == 2
+      and all(k.interpolation == 'LINEAR' for k in fc.keyframe_points))
+check("scene.camera is spin rig camera", _scene.camera is cam)
+
+# rebuild in orbit mode sweeps the spin rig and restores the target
+props.mode = 'CAMERA_ORBIT'
+op.execute(bpy.context)
+check("mode switch: spin removed", db.get("Karuselka Spin") is None)
+check("mode switch: pivot created", db.get("Karuselka Pivot") is not None)
+check("mode switch: target unparented", target.parent is None)
+cam2 = db.get("Karuselka Cam")
+check("mode switch: fresh camera orbits again",
+      cam2 is not None and cam2 is not cam and cam2.parent is db.get("Karuselka Pivot"))
 
 # ---------------------------------------------------------------- render
 reset()

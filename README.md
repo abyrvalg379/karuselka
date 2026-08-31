@@ -9,17 +9,23 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 
 ## Features
 
-- One click: pivot empty + orbit camera + keyframes, live immediately
+- One click: rig + keyframes, live immediately
+- Two modes: **Camera** orbits the object, or **Object** spins on its axis
+  with a static camera
 - The rig camera becomes the active scene camera (Numpad 0 / render);
   Remove Rig puts your previous active camera back
 - Constant rotation speed — interpolation is forced to LINEAR
   (bezier easing is the classic turntable mistake)
-- Auto radius from the object size (safe framing on a 50 mm lens), or set your own
-- Fractional rounds: 1.5 turns, 2.75, whatever
-- CW / CCW direction
-- Uses your camera or creates its own (50 mm, DoF off, near/far clip
-  sized to the orbit so small and huge models stay in view)
-- **Render Turntable** — non-blocking animation render to `//turntable/`
+- Auto radius = object size × Margin (default 2.5, adjustable) — never
+  right up against the model
+- Camera settings right in the panel: Lens, DoF, near/far clip — edits
+  apply to the rig camera live
+- Every Create Rig starts from fresh defaults; the **Keep Settings**
+  checkbox reuses the previous camera's lens/DoF/clips instead
+- Auto near/far clip at a fixed 1000:1 ratio — small and huge models
+  stay in view without depth-buffer artifacts
+- **Render Turntable** — non-blocking animation render to `//turntable/`,
+  warns if the scene has no lights
 - **Remove Rig** deletes only what KARUSELKA created; your camera survives
 - One rig at a time: repeating Create Rig rebuilds it, never stacks
 
@@ -39,23 +45,29 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 
 | Parameter | Meaning |
 |-----------|---------|
-| Target | object to orbit around (falls back to the active object) |
+| Mode | Camera = orbit around the object; Object = the object spins, camera static |
+| Target | object to turntable (falls back to the active object) |
 | Camera | yours, or auto-created |
 | Frames | frames per full revolution; fps comes from the scene |
 | Rounds | revolutions, fractional allowed |
-| Radius | orbit radius; 0 = auto (object size × 1.5) |
+| Radius | orbit distance; 0 = auto (object size × Margin) |
+| Margin | auto-radius multiplier (default 2.5) |
 | Height | camera height relative to the object center |
-| Dir | orbit direction viewed from above |
+| Dir | rotation direction viewed from above |
+| Lens / DoF / Clip | rig camera settings, applied live |
+| Keep Settings | rebuild inherits the previous camera instead of defaults |
 | Output | render path, default `//turntable/` |
 
 ### Notes
 
+- Object Spin temporarily parents the target to a spin empty; Remove Rig
+  unparents it again with the world transform preserved.
 - Render Turntable sets the scene frame range to `1..N` and leaves it visible
   in the timeline; engine, samples and format settings are not touched.
-- With your own camera KARUSELKA parents it to the pivot and aims it;
-  Remove Rig detaches it again (keeps the world transform).
-- Keyframes live on the pivot (`rotation_euler.z`, frame 1 → frame N);
-  tweak speed by editing Frames/Rounds and re-running Create Rig.
+- With your own camera KARUSELKA aims it and (in Camera mode) parents it to
+  the pivot; Remove Rig detaches it again (keeps the world transform).
+- Keyframes live on the pivot/spin empty (`rotation_euler.z`, frame 1 →
+  frame N); tweak speed by editing Frames/Rounds and re-running Create Rig.
 
 ## License
 
