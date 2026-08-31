@@ -45,6 +45,9 @@ props.radius = 0.0
 
 r = bpy.ops.karuselka.create_rig()
 check("create FINISHED", r == {'FINISHED'}, r)
+check("timeline follows rig (1..120)",
+      (scene.frame_start, scene.frame_end) == (1, 120),
+      (scene.frame_start, scene.frame_end))
 
 pivot = bpy.data.objects.get("Karuselka Pivot")
 cam = bpy.data.objects.get("Karuselka Cam")

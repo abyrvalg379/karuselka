@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 1, 1),
+    "version": (1, 1, 2),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
@@ -405,6 +405,9 @@ class KR_OT_create_rig(Operator):
         context.scene.camera = cam
 
         props["has_rig"] = 1
+        # timeline follows the rig: no manual frame-range fiddling
+        context.scene.frame_start = 1
+        context.scene.frame_end = end_f
         # show the rig from its start: at any other frame the camera sits
         # at that frame's orbit angle and looks like it spawned "randomly"
         context.scene.frame_set(1)

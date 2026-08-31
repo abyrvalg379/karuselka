@@ -521,7 +521,9 @@ if fc and len(fc.keyframe_points) == 2:
           k1.interpolation == 'LINEAR' and k2.interpolation == 'LINEAR',
           str((k1.interpolation, k2.interpolation)))
 check("has_rig flag set", props.get("has_rig") == 1)
-check("create leaves scene frame range alone", _scene.frame_end == 250)
+check("timeline follows rig (1..120)",
+      (_scene.frame_start, _scene.frame_end) == (1, 120),
+      str((_scene.frame_start, _scene.frame_end)))
 check("create jumps to frame 1 (start of the rig)", _scene.frame_set_calls == [1],
       str(_scene.frame_set_calls))
 check("parent_inverse reset to identity",

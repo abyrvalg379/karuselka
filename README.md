@@ -64,8 +64,8 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 
 - Object Spin parents the model's hierarchy root to a `KARUSELKA_Empty`;
   Remove Rig unparents it again with the world transform preserved.
-- Render Turntable sets the scene frame range to `1..N` and leaves it visible
-  in the timeline; engine, samples and format settings are not touched.
+- Create Rig and Render Turntable set the scene frame range to `1..N`
+  automatically; engine, samples and format settings are not touched.
 - With your own camera KARUSELKA aims it and (in Camera mode) parents it to
   the pivot; Remove Rig detaches it again (keeps the world transform).
 - Keyframes live on the pivot/spin empty (`rotation_euler.z`, frame 1 →
