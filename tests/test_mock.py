@@ -270,7 +270,12 @@ class FakeScene:
         self.frame_set_calls = []
         self.camera = None
         self.cursor = types.SimpleNamespace(location=FakeVec())
-        self.render = types.SimpleNamespace(filepath="/tmp/render/", fps=24)
+        self.render = types.SimpleNamespace(
+            filepath="/tmp/render/", fps=24, engine='CYCLES',
+            resolution_x=1920, resolution_y=1080, resolution_percentage=100,
+            image_settings=types.SimpleNamespace(file_format='PNG'),
+            ffmpeg=types.SimpleNamespace(format='MPEG4', codec='H264',
+                                         audio_codec='NONE'))
 
     @property
     def objects(self):
@@ -922,7 +927,8 @@ check("render FINISHED", rv == {'FINISHED'})
 check("frame range set 1..120",
       (_scene.frame_start, _scene.frame_end) == (1, 120),
       str((_scene.frame_start, _scene.frame_end)))
-check("render filepath from output prop", _scene.render.filepath == "//turntable/",
+check("render filepath is asset_turntable",
+      _scene.render.filepath == "//turntable/Target_turntable",
       _scene.render.filepath)
 check("render INVOKE animation=True",
       render_calls and render_calls[0][0] == ('INVOKE_DEFAULT',)
@@ -932,8 +938,32 @@ check("render creates nothing", len(db) == objects_before)
 
 props.output = "//turntable"   # no trailing slash
 op_render.execute(bpy.context)
-check("output slash normalized", _scene.render.filepath == "//turntable/",
+check("output slash normalized",
+      _scene.render.filepath == "//turntable/Target_turntable",
       _scene.render.filepath)
+
+props.resolution = 'SQUARE_1080'
+props.samples = 'NORMAL'
+props.format = 'MP4'
+rv = op_render.execute(bpy.context)
+check("output presets applied", rv == {'FINISHED'}
+      and _scene.render.resolution_x == 1080
+      and _scene.render.resolution_percentage == 100
+      and _scene.render.image_settings.file_format == 'FFMPEG'
+      and _scene.render.ffmpeg.format == 'MPEG4'
+      and _scene.render.ffmpeg.codec == 'H264',
+      (_scene.render.resolution_x, _scene.render.image_settings.file_format))
+check("video naming asset_turntable",
+      _scene.render.filepath == "//turntable/Target_turntable",
+      _scene.render.filepath)
+props.resolution = 'SCENE'
+props.samples = 'SCENE'
+props.format = 'PNG'
+op_render.execute(bpy.context)
+check("scene/png back", _scene.render.image_settings.file_format == 'PNG')
+check("safe filename sanitizes",
+      ns["_safe_filename"]('A:B/C*D') == 'A_B_C_D'
+      and ns["_safe_filename"]("  ") == "turntable")
 
 # ---------------------------------------------------------------- slotted actions
 # Blender 4.4+ slotted actions: no Action.fcurves, walk layers/strips/channelbags

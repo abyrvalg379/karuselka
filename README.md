@@ -25,7 +25,11 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
   right up against the model
 - Camera settings right in the panel: Lens, DoF, near/far clip (Blender
   defaults) — edits apply to the rig camera live
-- Radius/Margin/Height move the camera live too; **Center** = Bounds
+- Radius/Margin/Height move the camera live too
+- **Output presets**: Resolution (Square 1080 / 1080p / 1440p / 4K / Scene),
+  Samples (Draft / Normal / High / Scene) and Format (PNG frames / MP4 / WebM),
+  applied on Render Turntable; the turntable is named `<asset>_turntable`
+  automatically (asset = collection or target name); **Center** = Bounds
   or the 3D cursor as the rotation center
 - Frames/Rounds/Dir edits retime the rig live: the last keyframe slides to
   the new end and the timeline follows — no rebuild needed
@@ -61,6 +65,7 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 | Frames | frames per full revolution; fps comes from the scene |
 | Rounds | revolutions, fractional allowed |
 | Center | rotation center: scope bounds middle or the 3D cursor |
+| Resolution / Samples / Format | output presets; Scene = keep as is |
 | Radius | orbit distance; 0 = auto (scope size × Margin) |
 | Margin | auto-radius multiplier (default 2.5) |
 | Height | camera height relative to the object center |

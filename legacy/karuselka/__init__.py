@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 2, 2),
+    "version": (1, 3, 0),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
@@ -16,6 +16,7 @@ bl_info = {
 # Copyright (C) 2026 Maksim Kovalev
 
 import math
+import re
 
 import bpy
 from mathutils import Matrix, Vector
@@ -303,6 +304,50 @@ def _poll_camera(_self, obj):
     return obj.type == 'CAMERA'
 
 
+_RESOLUTIONS = {
+    'SQUARE_1080': (1080, 1080),
+    'HD_1080': (1920, 1080),
+    'QHD_1440': (2560, 1440),
+    'UHD_4K': (3840, 2160),
+}
+
+_SAMPLE_COUNTS = {'DRAFT': 32, 'NORMAL': 128, 'HIGH': 256}
+
+
+def _scope_name(props):
+    if props.collection is not None:
+        return props.collection.name
+    if props.target is not None:
+        return props.target.name
+    return "turntable"
+
+
+def _safe_filename(name):
+    """Strip filesystem-hostile characters from a Blender name."""
+    cleaned = re.sub(r'[\\/:*?"<>|]', "_", name).strip()
+    return cleaned or "turntable"
+
+
+def _apply_samples(scene, preset):
+    """Quality preset -> active engine samples. Scene/K-Cycles safe: only
+    touches properties that exist."""
+    count = _SAMPLE_COUNTS.get(preset)
+    if not count:
+        return
+    engine = scene.render.engine
+    try:
+        if engine == 'CYCLES':
+            cycles = getattr(scene, "cycles", None)
+            if cycles is not None and hasattr(cycles, "samples"):
+                cycles.samples = count
+        elif engine.startswith('BLENDER_EEVEE'):
+            eevee = getattr(scene, "eevee", None)
+            if eevee is not None and hasattr(eevee, "taa_render_samples"):
+                eevee.taa_render_samples = count
+    except Exception:
+        pass
+
+
 class KR_SceneSettings(PropertyGroup):
     mode: EnumProperty(
         name="Mode",
@@ -426,9 +471,44 @@ class KR_SceneSettings(PropertyGroup):
                     "instead of defaults",
         default=False,
     )
+    resolution: EnumProperty(
+        name="Resolution",
+        description="Render resolution; Scene keeps the current settings",
+        items=(
+            ('SCENE', "Scene", "Keep the scene resolution"),
+            ('SQUARE_1080', "Square 1080", "1080 x 1080"),
+            ('HD_1080', "1080p", "1920 x 1080"),
+            ('QHD_1440', "1440p", "2560 x 1440"),
+            ('UHD_4K', "4K UHD", "3840 x 2160"),
+        ),
+        default='SCENE',
+    )
+    samples: EnumProperty(
+        name="Samples",
+        description="Render samples for the active engine; Scene keeps the "
+                    "current settings",
+        items=(
+            ('SCENE', "Scene", "Keep the scene samples"),
+            ('DRAFT', "Draft (32)", "32 samples"),
+            ('NORMAL', "Normal (128)", "128 samples"),
+            ('HIGH', "High (256)", "256 samples"),
+        ),
+        default='SCENE',
+    )
+    format: EnumProperty(
+        name="Format",
+        description="Output format of the turntable",
+        items=(
+            ('PNG', "PNG frames", "PNG image sequence"),
+            ('MP4', "MP4", "H.264 video"),
+            ('WEBM', "WebM", "WebM video"),
+        ),
+        default='PNG',
+    )
     output: StringProperty(
         name="Output",
-        description="Render output path for the turntable frames",
+        description="Render output folder; the turntable is named "
+                    "<asset>_turntable automatically",
         default="//turntable/",
         subtype='DIR_PATH',
     )
@@ -625,10 +705,32 @@ class KR_OT_render_turntable(Operator):
         end_f = turn_end_frame(props.frames, props.rounds)
         scene.frame_start = 1
         scene.frame_end = end_f
+
+        if props.resolution != 'SCENE':
+            rx, ry = _RESOLUTIONS[props.resolution]
+            scene.render.resolution_x = rx
+            scene.render.resolution_y = ry
+            scene.render.resolution_percentage = 100
+        _apply_samples(scene, props.samples)
+
         out = props.output or "//turntable/"
         if not out.endswith(("/", "\\")):
             out += "/"
-        scene.render.filepath = out
+        scene.render.filepath = out + _safe_filename(_scope_name(props)) \
+                                + "_turntable"
+
+        image_settings = scene.render.image_settings
+        if props.format == 'PNG':
+            image_settings.file_format = 'PNG'
+        else:
+            image_settings.file_format = 'FFMPEG'
+            if props.format == 'MP4':
+                scene.render.ffmpeg.format = 'MPEG4'
+                scene.render.ffmpeg.codec = 'H264'
+            else:
+                scene.render.ffmpeg.format = 'WEBM'
+                scene.render.ffmpeg.codec = 'WEBM'
+            scene.render.ffmpeg.audio_codec = 'NONE'
 
         if not any(o.type == 'LIGHT' for o in scene.objects):
             self.report({'WARNING'}, "No lights in the scene — "
@@ -683,6 +785,10 @@ class KR_PT_main_panel(Panel):
         row.prop(props, "clip_end")
         col.prop(props, "keep_settings")
         col.separator()
+        col.label(text="Output:")
+        col.prop(props, "resolution")
+        col.prop(props, "samples")
+        col.prop(props, "format")
         col.prop(props, "output")
 
         end_f = turn_end_frame(props.frames, props.rounds)
