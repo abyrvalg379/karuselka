@@ -188,6 +188,31 @@ def _update_rig_timing(self, context):
     scene.frame_end = end_f
 
 
+def _update_rig_placement(self, context):
+    """Radius/Margin/Height edits move the rig camera live; with Auto Clip
+    the near/far planes follow the new distance at a fixed 1000:1 ratio."""
+    scene = context.scene if context else None
+    props = getattr(scene, "karuselka", None) if scene else None
+    cam = props.camera if props else None
+    if props is None or scene is None or cam is None or cam.type != 'CAMERA':
+        return
+    empties = find_marked_empties(scene)
+    if not empties or props.target is None:
+        return
+    radius = (props.radius if props.radius > 0.0
+              else auto_radius(props.target, props.margin))
+    center = empties[0].location    # pivot/spin sits at the rotation center
+    if cam.parent is not None:      # orbit: location is pivot-local
+        cam.location = (radius, 0.0, props.height)
+    else:                           # spin: camera is unparented = world space
+        cam.location = center + Vector((radius, 0.0, props.height))
+    if props.auto_clip:
+        cs, ce = radius / 100.0, radius * 10.0
+        cam.data.clip_start = cs
+        cam.data.clip_end = ce
+        props.clip_start, props.clip_end = cs, ce
+
+
 def _poll_camera(_self, obj):
     return obj.type == 'CAMERA'
 
@@ -234,6 +259,7 @@ class KR_SceneSettings(PropertyGroup):
         default=0.0,
         min=0.0,
         subtype='DISTANCE',
+        update=_update_rig_placement,
     )
     margin: FloatProperty(
         name="Margin",
@@ -241,12 +267,14 @@ class KR_SceneSettings(PropertyGroup):
         default=2.5,
         min=1.1,
         soft_max=10.0,
+        update=_update_rig_placement,
     )
     height: FloatProperty(
         name="Height",
         description="Camera height relative to the object center",
         default=0.0,
         subtype='DISTANCE',
+        update=_update_rig_placement,
     )
     direction: EnumProperty(
         name="Dir",
@@ -272,6 +300,12 @@ class KR_SceneSettings(PropertyGroup):
         default=False,
         update=_apply_camera_settings,
     )
+    auto_clip: BoolProperty(
+        name="Auto Clip",
+        description="Near/far clip follow the orbit distance (fixed 1000:1)",
+        default=True,
+        update=_update_rig_placement,
+    )
     clip_start: FloatProperty(
         name="Clip Start",
         description="Near clipping of the rig camera",
@@ -292,7 +326,7 @@ class KR_SceneSettings(PropertyGroup):
     keep_settings: BoolProperty(
         name="Keep Settings",
         description="Rebuild reuses the previous camera's lens/DoF/clips "
-                    "instead of defaults",
+                    "instead of defaults (clips stay manual)",
         default=False,
     )
     output: StringProperty(
@@ -345,6 +379,7 @@ class KR_OT_create_rig(Operator):
         if prev is not None:
             lens, dof = prev["lens"], prev["dof"]
             cs, ce = prev["cs"], prev["ce"]
+            props.auto_clip = False    # inherited clips are manual
         else:
             # fresh defaults every time — insurance against inherited junk
             lens, dof = 50.0, False
@@ -528,7 +563,9 @@ class KR_PT_main_panel(Panel):
         col.label(text="Camera:")
         col.prop(props, "lens")
         col.prop(props, "use_dof")
+        col.prop(props, "auto_clip")
         row = col.row(align=True)
+        row.enabled = not props.auto_clip
         row.prop(props, "clip_start")
         row.prop(props, "clip_end")
         col.prop(props, "keep_settings")

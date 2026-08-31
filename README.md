@@ -22,6 +22,9 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
   right up against the model
 - Camera settings right in the panel: Lens, DoF, near/far clip — edits
   apply to the rig camera live
+- Radius/Margin/Height move the camera live too; the **Auto Clip** toggle
+  keeps near/far planes at a fixed 1000:1 ratio around the orbit (turn it
+  off to set clips manually)
 - Frames/Rounds/Dir edits retime the rig live: the last keyframe slides to
   the new end and the timeline follows — no rebuild needed
 - Every Create Rig starts from fresh defaults; the **Keep Settings**
@@ -59,6 +62,7 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 | Height | camera height relative to the object center |
 | Dir | rotation direction viewed from above |
 | Lens / DoF / Clip | rig camera settings, applied live |
+| Auto Clip | near/far clip follow the orbit distance; off = manual clips |
 | Keep Settings | rebuild inherits the previous camera instead of defaults |
 | Output | render path, default `//turntable/` |
 

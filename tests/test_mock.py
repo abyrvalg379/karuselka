@@ -415,6 +415,10 @@ check("camera settings have live update",
 check("timing props retime the rig live",
       all(PROP_KW[n].get("update") is ns["_update_rig_timing"]
           for n in ("Frames", "Rounds", "Dir")))
+check("placement props move the camera live",
+      all(PROP_KW[n].get("update") is ns["_update_rig_placement"]
+          for n in ("Radius", "Margin", "Height", "Auto Clip")))
+check("auto_clip default on", KR_SceneSettings.auto_clip is True)
 
 # ---------------------------------------------------------------- scene glue
 def fresh_props(target=None):
@@ -646,6 +650,7 @@ op.execute(bpy.context)          # rebuild: inherit from previous camera
 cam = db.get("Karuselka Cam")
 check("keep: lens inherited", cam.data.lens == 85.0, str(cam.data.lens))
 check("keep: clips inherited", cam.data.clip_start == 0.2, str(cam.data.clip_start))
+check("keep: clips become manual", props.auto_clip is False)
 props.keep_settings = False
 op.execute(bpy.context)          # rebuild: back to defaults
 cam = db.get("Karuselka Cam")
@@ -686,13 +691,40 @@ check("retime: rounds doubles length and angle",
       str(tuple(fc.keyframe_points[-1].co)))
 props.frames, props.rounds = 120, 1.0
 ns["_update_rig_timing"](props, bpy.context)
+
+# placement edits move the rig camera live (orbit: pivot-local)
+props.auto_clip = True
+props.radius = 7.0
+ns["_update_rig_placement"](props, bpy.context)
+check("placement: radius moves camera", tuple(cam.location) == (7.0, 0.0, 0.0),
+      str(tuple(cam.location)))
+props.height = 1.5
+ns["_update_rig_placement"](props, bpy.context)
+check("placement: height raises camera",
+      tuple(cam.location) == (7.0, 0.0, 1.5), str(tuple(cam.location)))
+check("placement: auto clips follow radius",
+      abs(cam.data.clip_start - 0.07) < 1e-6
+      and abs(cam.data.clip_end - 70.0) < 1e-6,
+      (cam.data.clip_start, cam.data.clip_end))
+props.auto_clip = False
+props.radius = 0.0
+ns["_update_rig_placement"](props, bpy.context)
+check("placement: margin fallback radius", tuple(cam.location) == (5.0, 0.0, 1.5),
+      str(tuple(cam.location)))
+check("placement: manual clips untouched",
+      abs(cam.data.clip_start - 0.07) < 1e-6, str(cam.data.clip_start))
+props.height = 0.0
+ns["_update_rig_placement"](props, bpy.context)
+
+# no rig -> callbacks are no-ops
 props2 = KR_SceneSettings()
 _scene.karuselka = props2
 try:
     ns["_update_rig_timing"](props2, bpy.context)
-    check("retime without rig: no crash", True)
+    ns["_update_rig_placement"](props2, bpy.context)
+    check("callbacks without rig: no crash", True)
 except Exception:
-    check("retime without rig: no crash", False, traceback.format_exc())
+    check("callbacks without rig: no crash", False, traceback.format_exc())
 
 # ---------------------------------------------------------------- spin mode
 reset()
@@ -716,6 +748,12 @@ check("spin camera is static (unparented)", cam.parent is None)
 check("spin camera at center+radius",
       cam.location.xyz == (8.0, -1.0, 2.0), str(cam.location))
 check("spin camera aims at spin", cam.constraints[0].target is spin)
+props.radius = 7.0
+ns["_update_rig_placement"](props, bpy.context)
+check("spin placement: camera moves in world",
+      tuple(cam.location) == (10.0, -1.0, 2.0), str(tuple(cam.location)))
+props.radius = 0.0
+ns["_update_rig_placement"](props, bpy.context)
 fc = z_fcurve(spin)
 check("spin keys 2 LINEAR", fc is not None and len(fc.keyframe_points) == 2
       and all(k.interpolation == 'LINEAR' for k in fc.keyframe_points))

@@ -118,6 +118,22 @@ check("orbit spans the new range", (pmid - cam.matrix_world.translation).length 
 props.frames = 120
 check("timeline back to 120", scene.frame_end == 120, scene.frame_end)
 
+# placement edits move the camera live
+props.radius = 7.0
+bpy.context.view_layer.update()
+check("placement: radius moves camera live",
+      abs(cam.matrix_world.translation.x - 7.0) < 1e-5
+      and abs(cam.matrix_world.translation.z) < 1e-5,
+      tuple(round(v, 3) for v in cam.matrix_world.translation))
+props.height = 1.5
+bpy.context.view_layer.update()
+check("placement: height moves camera live",
+      abs(cam.matrix_world.translation.z - 1.5) < 1e-5,
+      round(cam.matrix_world.translation.z, 3))
+props.auto_clip = False
+props.radius = 0.0
+props.height = 0.0
+
 r = bpy.ops.karuselka.remove_rig()
 check("remove FINISHED", r == {'FINISHED'}, r)
 check("scene cleaned",
