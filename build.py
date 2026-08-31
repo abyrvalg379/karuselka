@@ -34,7 +34,8 @@ BL_INFO = '''bl_info = {
 
 def main():
     manifest = (EXT / "blender_manifest.toml").read_text(encoding="utf-8")
-    ver = re.search(r'version = "(\d+)\.(\d+)\.(\d+)"', manifest)
+    # ^-anchored: otherwise schema_version matches first
+    ver = re.search(r'^version = "(\d+)\.(\d+)\.(\d+)"', manifest, re.MULTILINE)
     if not ver:
         sys.exit("build.py: no version line in blender_manifest.toml")
     v = tuple(int(g) for g in ver.groups())
