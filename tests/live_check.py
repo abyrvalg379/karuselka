@@ -63,6 +63,12 @@ check("pivot at bbox center", (pivot.location - center).length < 1e-5,
       f"{tuple(pivot.location)} vs {tuple(center)}")
 check("camera at auto radius", cam.location.x > 0.0 and cam.location.y == 0.0
       and cam.location.z == 0.0, tuple(cam.location))
+check("scene.camera is the rig camera", scene.camera is cam,
+      scene.camera.name if scene.camera else None)
+check("previous active camera remembered", props.get("prev_camera") == "Camera",
+      props.get("prev_camera"))
+check("clips sized to orbit", abs(cam.data.clip_start - 0.003) < 1e-6
+      and cam.data.clip_end == 100.0, (cam.data.clip_start, cam.data.clip_end))
 
 fc = mod._action_fcurves(pivot.animation_data.action).find("rotation_euler", index=2)
 check("z fcurve 2 keys", fc is not None and len(fc.keyframe_points) == 2)
@@ -86,6 +92,10 @@ p60 = cam.matrix_world.translation.copy()
 d1, d2 = (p30 - p1).length, (p60 - p30).length
 check("camera orbits", (p60 - p1).length > 0.01, (p1 - p60).length)
 check("constant speed (linear)", abs(d1 - d2) < 1e-3, (d1, d2))
+view = (cam.matrix_world.to_quaternion() @ mathutils.Vector((0, 0, -1))).normalized()
+to_pivot = (pivot.matrix_world.translation - cam.matrix_world.translation).normalized()
+check("camera aims at the pivot", view.dot(to_pivot) > 0.999,
+      round(view.dot(to_pivot), 5))
 
 r = bpy.ops.karuselka.remove_rig()
 check("remove FINISHED", r == {'FINISHED'}, r)
@@ -125,6 +135,9 @@ bpy.ops.karuselka.remove_rig()
 check("scene cleaned again",
       bpy.data.objects.get("Karuselka Pivot") is None
       and bpy.data.objects.get("Karuselka Cam") is None)
+check("scene.camera restored to the original",
+      scene.camera is bpy.data.objects.get("Camera"),
+      scene.camera.name if scene.camera else None)
 
 mod.unregister()
 check("unregister ok", not hasattr(bpy.types.Scene, "karuselka"))

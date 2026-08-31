@@ -10,12 +10,15 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 ## Features
 
 - One click: pivot empty + orbit camera + keyframes, live immediately
+- The rig camera becomes the active scene camera (Numpad 0 / render);
+  Remove Rig puts your previous active camera back
 - Constant rotation speed — interpolation is forced to LINEAR
   (bezier easing is the classic turntable mistake)
 - Auto radius from the object size (safe framing on a 50 mm lens), or set your own
 - Fractional rounds: 1.5 turns, 2.75, whatever
 - CW / CCW direction
-- Uses your camera or creates its own (50 mm, DoF off)
+- Uses your camera or creates its own (50 mm, DoF off, near/far clip
+  sized to the orbit so small and huge models stay in view)
 - **Render Turntable** — non-blocking animation render to `//turntable/`
 - **Remove Rig** deletes only what KARUSELKA created; your camera survives
 - One rig at a time: repeating Create Rig rebuilds it, never stacks

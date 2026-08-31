@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 0, 1),
+    "version": (1, 0, 2),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Fast camera turntable rig: orbit camera + linear keyframes + animation render",
@@ -117,6 +117,13 @@ def _remove_rig_objects(context):
     if user_cam is not None and user_cam.get(MARKER, 0) == 1:
         user_cam = None    # ours — deleted below with the rest
 
+    # scene.camera back to what it was, but only if it still is the rig's
+    cur = scene.camera
+    used = props.camera
+    if cur is not None and (cur == used or cur.get(MARKER, 0) == 1):
+        prev_name = props.get("prev_camera", "")
+        scene.camera = bpy.data.objects.get(prev_name) if prev_name else None
+
     if user_cam is not None and pivot is not None:
         for con in list(user_cam.constraints):
             if (con.type == 'TRACK_TO' and con.name == TRACK_NAME
@@ -222,6 +229,8 @@ class KR_OT_create_rig(Operator):
         # one rig at a time: drop the previous one (markers only)
         _remove_rig_objects(context)
 
+        radius = props.radius if props.radius > 0.0 else auto_radius(target)
+
         pivot = bpy.data.objects.new(PIVOT_NAME, None)
         pivot.empty_display_type = 'PLAIN_AXES'
         context.scene.collection.objects.link(pivot)
@@ -233,6 +242,11 @@ class KR_OT_create_rig(Operator):
             cam_data = bpy.data.cameras.new(CAM_NAME)
             cam_data.lens = 50.0
             cam_data.dof.use_dof = False
+            # clips sized to the orbit: on a tiny model the default near
+            # plane (0.1) sits past the object, on a huge one the object is
+            # past the far plane (100) — both look like an empty camera view
+            cam_data.clip_start = min(0.1, max(0.001, radius * 0.001))
+            cam_data.clip_end = max(100.0, radius * 10.0)
             cam = bpy.data.objects.new(CAM_NAME, cam_data)
             context.scene.collection.objects.link(cam)
             cam[MARKER] = 1
@@ -243,7 +257,6 @@ class KR_OT_create_rig(Operator):
         # a camera parented earlier (UI or another rig) keeps a stale
         # matrix_parent_inverse — that drags it to a random spot on 3.6–4.x
         cam.matrix_parent_inverse = Matrix()
-        radius = props.radius if props.radius > 0.0 else auto_radius(target)
         cam.location = (radius, 0.0, props.height)
 
         for con in list(cam.constraints):
@@ -262,6 +275,13 @@ class KR_OT_create_rig(Operator):
                                 turn_end_angle(props.rounds, props.direction))
         pivot.keyframe_insert(data_path="rotation_euler", frame=end_f)
         _force_linear(pivot)
+
+        # Numpad 0 and the render look through scene.camera — point it at
+        # the rig camera; Remove Rig puts the previous one back
+        cur = context.scene.camera
+        if cur is None or cur.get(MARKER, 0) != 1:
+            props["prev_camera"] = cur.name if cur else ""
+        context.scene.camera = cam
 
         props["has_rig"] = 1
         # show the rig from its start: at any other frame the camera sits

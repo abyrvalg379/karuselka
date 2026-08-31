@@ -184,6 +184,8 @@ class FakeCamData:
     def __init__(self, name="Camera"):
         self.name = name
         self.lens = 50.0
+        self.clip_start = 0.1
+        self.clip_end = 100.0
         self.dof = types.SimpleNamespace(use_dof=False)
 
 
@@ -219,6 +221,7 @@ class FakeScene:
         self.frame_start = 1
         self.frame_end = 250
         self.frame_set_calls = []
+        self.camera = None
         self.render = types.SimpleNamespace(filepath="/tmp/render/", fps=24)
 
     @property
@@ -450,6 +453,11 @@ check("camera created", cam is not None and cam.type == 'CAMERA')
 check("camera marked", cam.get("karuselka") == 1)
 check("camera lens 50", cam.data.lens == 50.0)
 check("camera dof off", cam.data.dof.use_dof is False)
+check("clips sized to orbit", cam.data.clip_start == 0.003
+      and cam.data.clip_end == 100.0,
+      (cam.data.clip_start, cam.data.clip_end))
+check("scene.camera set to rig camera", _scene.camera is cam)
+check("prev_camera empty (scene had none)", props.get("prev_camera") == "")
 check("camera parented to pivot", cam.parent is pivot)
 check("camera at auto radius (3,0,0)",
       tuple(cam.location) == (3.0, 0.0, 0.0), str(tuple(cam.location)))
@@ -574,6 +582,7 @@ rv = op_rm.execute(bpy.context)
 check("remove own rig FINISHED", rv == {'FINISHED'})
 check("own camera deleted", db.get("Karuselka Cam") is None)
 check("own pivot deleted", db.get("Karuselka Pivot") is None)
+check("scene.camera restored (was none)", _scene.camera is None)
 
 # ---------------------------------------------------------------- render
 reset()
