@@ -48,11 +48,16 @@ def auto_radius(dims, margin):
     return radius
 
 
+GEOMETRY_TYPES = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META'}
+
+
 def combined_bounds(obs):
-    """(center, dims) of the world-space bounding box over all objects."""
+    """(center, dims) of the world-space bounding box over the geometry
+    objects; helpers (empties, lights, cameras) don't distort the framing."""
+    geo = [ob for ob in obs if ob.type in GEOMETRY_TYPES] or list(obs)
     lo = [float("inf")] * 3
     hi = [-float("inf")] * 3
-    for ob in obs:
+    for ob in geo:
         for c in ob.bound_box:
             w = ob.matrix_world @ Vector(c)
             for i in range(3):

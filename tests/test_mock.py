@@ -842,6 +842,31 @@ op_rm.report = lambda t, m: None
 op_rm.execute(bpy.context)
 check("assembly: roots freed", part_a.parent is None and part_b.parent is None)
 
+# helper empties don't distort the framing (they still spin along)
+reset()
+part_a = make_target("PartA")
+part_b = make_target("PartB", translation=(6.0, 0.0, 0.0))
+helper = db.new("Helper", None)
+helper.type = 'EMPTY'
+helper.location = FakeVec((0.0, 5.0, -4.0))          # far away
+helper.bound_box = [(0.0, 0.0, 0.0)] * 8             # empties have no volume
+coll = FakeColl("Asm2")
+coll.objects.link(part_a)
+coll.objects.link(part_b)
+coll.objects.link(helper)
+props = fresh_props()
+props.collection = coll
+props.mode = 'OBJECT_SPIN'
+op = ns["KR_OT_create_rig"]()
+op.report = lambda t, m: None
+rv = op.execute(bpy.context)
+spin = db.get("KARUSELKA_Empty")
+check("helpers: center ignores empties",
+      rv == {'FINISHED'} and spin is not None
+      and tuple(round(v, 3) for v in spin.location.xyz) == (3.0, 0.0, 0.0),
+      str(spin.location.xyz))
+check("helpers: empty root still spins along", helper.parent is spin)
+
 # ---------------------------------------------------------------- render
 reset()
 props = fresh_props()

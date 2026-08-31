@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 2, 0),
+    "version": (1, 2, 1),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
@@ -60,11 +60,16 @@ def auto_radius(dims, margin):
     return radius
 
 
+GEOMETRY_TYPES = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META'}
+
+
 def combined_bounds(obs):
-    """(center, dims) of the world-space bounding box over all objects."""
+    """(center, dims) of the world-space bounding box over the geometry
+    objects; helpers (empties, lights, cameras) don't distort the framing."""
+    geo = [ob for ob in obs if ob.type in GEOMETRY_TYPES] or list(obs)
     lo = [float("inf")] * 3
     hi = [-float("inf")] * 3
-    for ob in obs:
+    for ob in geo:
         for c in ob.bound_box:
             w = ob.matrix_world @ Vector(c)
             for i in range(3):
