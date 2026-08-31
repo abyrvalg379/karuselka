@@ -953,6 +953,12 @@ check("output presets applied", rv == {'FINISHED'}
       and _scene.render.ffmpeg.format == 'MPEG4'
       and _scene.render.ffmpeg.codec == 'H264',
       (_scene.render.resolution_x, _scene.render.image_settings.file_format))
+props.resolution = 'SCOPE_2048'
+op_render.execute(bpy.context)
+check("scope 2048x858 preset", _scene.render.resolution_x == 2048
+      and _scene.render.resolution_y == 858,
+      (_scene.render.resolution_x, _scene.render.resolution_y))
+props.resolution = 'SCENE'
 check("video naming asset_turntable",
       _scene.render.filepath == "//turntable/Target_turntable",
       _scene.render.filepath)

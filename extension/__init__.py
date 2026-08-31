@@ -4,6 +4,7 @@
 # Copyright (C) 2026 Maksim Kovalev
 
 import math
+import os
 import re
 
 import bpy
@@ -297,9 +298,18 @@ _RESOLUTIONS = {
     'HD_1080': (1920, 1080),
     'QHD_1440': (2560, 1440),
     'UHD_4K': (3840, 2160),
+    'SCOPE_2048': (2048, 858),
 }
 
 _SAMPLE_COUNTS = {'DRAFT': 32, 'NORMAL': 128, 'HIGH': 256}
+
+
+def _project_name():
+    """Name of the .blend file (the project); empty when never saved."""
+    filepath = getattr(bpy.data, "filepath", "") or ""
+    if filepath:
+        return os.path.splitext(os.path.basename(filepath))[0]
+    return ""
 
 
 def _scope_name(props):
@@ -468,6 +478,7 @@ class KR_SceneSettings(PropertyGroup):
             ('HD_1080', "1080p", "1920 x 1080"),
             ('QHD_1440', "1440p", "2560 x 1440"),
             ('UHD_4K', "4K UHD", "3840 x 2160"),
+            ('SCOPE_2048', "2048x858", "2048 x 858, 2.39:1 scope"),
         ),
         default='SCENE',
     )
@@ -704,8 +715,8 @@ class KR_OT_render_turntable(Operator):
         out = props.output or "//turntable/"
         if not out.endswith(("/", "\\")):
             out += "/"
-        scene.render.filepath = out + _safe_filename(_scope_name(props)) \
-                                + "_turntable"
+        asset = _project_name() or _scope_name(props)
+        scene.render.filepath = out + _safe_filename(asset) + "_turntable"
 
         image_settings = scene.render.image_settings
         if props.format == 'PNG':

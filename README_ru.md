@@ -25,10 +25,11 @@
   камера никогда не в упор
 - Настройки камеры прямо в панели: Lens, DoF, ближний/дальний клип
   (дефолты Blender) — правки применяются к камере рига сразу
-- **Пресеты выхода**: Resolution (Square 1080 / 1080p / 1440p / 4K / Scene),
+- **Пресеты выхода**: Resolution (Square 1080 / 1080p / 1440p / 4K / 2048x858 / Scene),
   Samples (Draft / Normal / High / Scene) и Format (PNG-кадры / MP4 / WebM) —
   применяются при Render Turntable; турнтейбл автоматически называется
-  `<asset>_turntable` (asset = имя коллекции или таргета);
+  `<asset>_turntable` (asset = имя проекта — файла .blend; фолбэк —
+  коллекция или таргет);
 - Radius/Margin/Height тоже двигают камеру живьём; **Center** = Bounds
   или 3D-курсор как центр вращения
 - Правки Frames/Rounds/Dir перестраивают риг живьём: последний кейфрейм
