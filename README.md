@@ -14,17 +14,18 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
   with a static camera. In Object mode the model's hierarchy root is parented
   to a `KARUSELKA_Empty` (if the target already has a parent, that parent
   chain root is used); Remove Rig restores the hierarchy
+- **Assembly scope**: point **Collection** at the model's root collection to
+  turntable the whole model — bbox, auto radius and rotation center come
+  from every object inside
 - The rig camera becomes the active scene camera (Numpad 0 / render);
   Remove Rig puts your previous active camera back
 - Constant rotation speed — interpolation is forced to LINEAR
   (bezier easing is the classic turntable mistake)
-- Auto radius = object size × Margin (default 2.5, adjustable) — never
+- Auto radius = scope size × Margin (default 2.5, adjustable) — never
   right up against the model
-- Camera settings right in the panel: Lens, DoF, near/far clip — edits
-  apply to the rig camera live
-- Radius/Margin/Height move the camera live too; the **Auto Clip** toggle
-  keeps near/far planes at a fixed 1000:1 ratio around the orbit (turn it
-  off to set clips manually)
+- Camera settings right in the panel: Lens, DoF, near/far clip (Blender
+  defaults) — edits apply to the rig camera live
+- Radius/Margin/Height move the camera live too
 - Frames/Rounds/Dir edits retime the rig live: the last keyframe slides to
   the new end and the timeline follows — no rebuild needed
 - Every Create Rig starts from fresh defaults; the **Keep Settings**
@@ -54,10 +55,11 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 |-----------|---------|
 | Mode | Camera = orbit around the object; Object = the object spins, camera static |
 | Target | object to turntable (falls back to the active object) |
+| Collection | turntable everything inside (overrides the Target) |
 | Camera | yours, or auto-created |
 | Frames | frames per full revolution; fps comes from the scene |
 | Rounds | revolutions, fractional allowed |
-| Radius | orbit distance; 0 = auto (object size × Margin) |
+| Radius | orbit distance; 0 = auto (scope size × Margin) |
 | Margin | auto-radius multiplier (default 2.5) |
 | Height | camera height relative to the object center |
 | Dir | rotation direction viewed from above |

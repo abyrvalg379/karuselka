@@ -40,21 +40,53 @@ def turn_end_angle(rounds, direction):
     return sign * math.tau * rounds
 
 
-def bbox_center_world(ob):
-    """World-space center of the object's bounding box."""
-    corners = ob.bound_box
-    center = Vector((0.0, 0.0, 0.0))
-    for c in corners:
-        center += ob.matrix_world @ Vector(c)
-    return center / float(len(corners))
-
-
-def auto_radius(ob, margin):
-    """Orbit radius: object's largest dimension x margin."""
-    radius = max(ob.dimensions) * margin if ob.dimensions else 0.0
+def auto_radius(dims, margin):
+    """Orbit radius: largest extent x margin."""
+    radius = max(dims) * margin if dims else 0.0
     if radius <= 0.0:
         radius = DEFAULT_RADIUS
     return radius
+
+
+def combined_bounds(obs):
+    """(center, dims) of the world-space bounding box over all objects."""
+    lo = [float("inf")] * 3
+    hi = [-float("inf")] * 3
+    for ob in obs:
+        for c in ob.bound_box:
+            w = ob.matrix_world @ Vector(c)
+            for i in range(3):
+                lo[i] = min(lo[i], w[i])
+                hi[i] = max(hi[i], w[i])
+    center = Vector(((lo[0] + hi[0]) / 2.0,
+                     (lo[1] + hi[1]) / 2.0,
+                     (lo[2] + hi[2]) / 2.0))
+    dims = Vector((hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]))
+    return center, dims
+
+
+def _collection_objects(coll, out, seen):
+    if coll.name in seen:
+        return
+    seen.add(coll.name)
+    for ob in coll.objects:
+        out.append(ob)
+    for child in coll.children:
+        _collection_objects(child, out, seen)
+
+
+def _scope_objects(props):
+    """Objects the turntable acts on: everything in the collection scope
+    (rig objects excluded) or the single target."""
+    if props.collection is not None:
+        found = []
+        _collection_objects(props.collection, found, set())
+        uniq = {}
+        for ob in found:
+            if ob.get(MARKER, 0) != 1:
+                uniq[ob.name] = ob
+        return list(uniq.values())
+    return [props.target] if props.target is not None else []
 
 
 def find_marked_empties(scene):
@@ -197,10 +229,11 @@ def _update_rig_placement(self, context):
     empties = find_marked_empties(scene)
     if not empties:
         return
+    scope = _scope_objects(props)
     if props.radius > 0.0:
         radius = props.radius
-    elif props.target is not None:
-        radius = auto_radius(props.target, props.margin)
+    elif scope:
+        radius = auto_radius(combined_bounds(scope)[1], props.margin)
     else:
         # target cleared/deleted — fall back to the radius used at create
         radius = props.get("last_radius", 0.0) or DEFAULT_RADIUS
@@ -209,11 +242,6 @@ def _update_rig_placement(self, context):
         cam.location = (radius, 0.0, props.height)
     else:                           # spin: camera is unparented = world space
         cam.location = center + Vector((radius, 0.0, props.height))
-    if props.auto_clip:
-        cs, ce = radius / 100.0, radius * 10.0
-        cam.data.clip_start = cs
-        cam.data.clip_end = ce
-        props.clip_start, props.clip_end = cs, ce
 
 
 def _poll_camera(_self, obj):
@@ -234,6 +262,12 @@ class KR_SceneSettings(PropertyGroup):
         name="Target",
         description="Object to turntable (falls back to the active object)",
         type=bpy.types.Object,
+    )
+    collection: PointerProperty(
+        name="Collection",
+        description="Turntable everything in this collection "
+                    "(overrides the Target)",
+        type=bpy.types.Collection,
     )
     camera: PointerProperty(
         name="Camera",
@@ -303,12 +337,6 @@ class KR_SceneSettings(PropertyGroup):
         default=False,
         update=_apply_camera_settings,
     )
-    auto_clip: BoolProperty(
-        name="Auto Clip",
-        description="Near/far clip follow the orbit distance (fixed 1000:1)",
-        default=True,
-        update=_update_rig_placement,
-    )
     clip_start: FloatProperty(
         name="Clip Start",
         description="Near clipping of the rig camera",
@@ -329,7 +357,7 @@ class KR_SceneSettings(PropertyGroup):
     keep_settings: BoolProperty(
         name="Keep Settings",
         description="Rebuild reuses the previous camera's lens/DoF/clips "
-                    "instead of defaults (clips stay manual)",
+                    "instead of defaults",
         default=False,
     )
     output: StringProperty(
@@ -355,9 +383,18 @@ class KR_OT_create_rig(Operator):
         target = props.target
         if target is None:
             target = context.active_object
-        if target is None:
-            self.report({'ERROR'}, "No target: assign one or select an object")
+        if target is None and props.collection is None:
+            self.report({'ERROR'},
+                        "No scope: set a Target, a Collection or select an object")
             return {'CANCELLED'}
+        scope = _scope_objects(props)
+        if not scope:
+            if props.collection is not None:
+                self.report({'ERROR'}, "The Collection is empty")
+                return {'CANCELLED'}
+            scope = [target]    # active-object fallback
+        scope_name = (props.collection.name if props.collection
+                      else target.name)
 
         # keep-settings: capture the previous camera BEFORE it is deleted
         prev = None
@@ -375,19 +412,18 @@ class KR_OT_create_rig(Operator):
         # one rig at a time: drop the previous one (markers only)
         _remove_rig_objects(context)
 
-        radius = props.radius if props.radius > 0.0 else auto_radius(target,
-                                                                    props.margin)
-        props["last_radius"] = radius    # placement fallback if target goes away
-        center = bbox_center_world(target)
+        radius = (props.radius if props.radius > 0.0
+                  else auto_radius(combined_bounds(scope)[1], props.margin))
+        props["last_radius"] = radius    # placement fallback if scope goes away
+        center, _ = combined_bounds(scope)
 
         if prev is not None:
             lens, dof = prev["lens"], prev["dof"]
             cs, ce = prev["cs"], prev["ce"]
-            props.auto_clip = False    # inherited clips are manual
         else:
             # fresh defaults every time — insurance against inherited junk
             lens, dof = 50.0, False
-            cs, ce = radius / 100.0, radius * 10.0
+            cs, ce = 0.1, 100.0          # Blender factory defaults
         props.lens, props.use_dof = lens, dof
         props.clip_start, props.clip_end = cs, ce
 
@@ -395,22 +431,25 @@ class KR_OT_create_rig(Operator):
         angle = turn_end_angle(props.rounds, props.direction)
 
         if props.mode == 'OBJECT_SPIN':
-            # rotate the top of the target's hierarchy: with an existing
-            # parent, the parent chain root is parented instead of the target
-            root = target
-            while root.parent is not None:
-                root = root.parent
-
+            # rotate the hierarchy roots of the whole scope: an object with
+            # an existing parent contributes its parent chain root instead
             rot_obj = bpy.data.objects.new(SPIN_NAME, None)
             rot_obj.empty_display_type = 'PLAIN_AXES'
             context.scene.collection.objects.link(rot_obj)
             rot_obj[MARKER] = 1
             rot_obj.location = center
 
-            root.parent = rot_obj
-            # exact inverse without depending on depsgraph-evaluated
-            # matrix_world of the freshly created empty (it is stale here)
-            root.matrix_parent_inverse = Matrix.Translation(-center)
+            roots = {}
+            for ob in scope:
+                r = ob
+                while r.parent is not None:
+                    r = r.parent
+                roots[r.name] = r
+            for r in roots.values():
+                r.parent = rot_obj
+                # exact inverse without depending on depsgraph-evaluated
+                # matrix_world of the freshly created empty (it is stale here)
+                r.matrix_parent_inverse = Matrix.Translation(-center)
 
             cam = props.camera
             if cam is None:
@@ -473,7 +512,7 @@ class KR_OT_create_rig(Operator):
         # at that frame's orbit angle and looks like it spawned "randomly"
         context.scene.frame_set(1)
         mode = "object spin" if props.mode == 'OBJECT_SPIN' else "camera orbit"
-        self.report({'INFO'}, f"Turntable rig ready: {target.name}, "
+        self.report({'INFO'}, f"Turntable rig ready: {scope_name}, "
                               f"{mode}, frames 1..{end_f}")
         return {'FINISHED'}
 
@@ -557,6 +596,7 @@ class KR_PT_main_panel(Panel):
 
         col = layout.column(align=True)
         col.prop(props, "target")
+        col.prop(props, "collection")
         col.prop(props, "camera")
         col.separator()
         col.prop(props, "frames")
@@ -569,9 +609,7 @@ class KR_PT_main_panel(Panel):
         col.label(text="Camera:")
         col.prop(props, "lens")
         col.prop(props, "use_dof")
-        col.prop(props, "auto_clip")
         row = col.row(align=True)
-        row.enabled = not props.auto_clip
         row.prop(props, "clip_start")
         row.prop(props, "clip_end")
         col.prop(props, "keep_settings")

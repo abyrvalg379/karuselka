@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "karuselka"
-version = "1.1.5"
+version = "1.2.0"
 name = "KARUSELKA"
 tagline = "Fast camera turntable rig for model showreels"
 maintainer = "Maksim Kovalev <maksim@example.com>"

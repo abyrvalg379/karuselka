@@ -219,6 +219,15 @@ class FakeCamData:
         self.dof = types.SimpleNamespace(use_dof=False)
 
 
+class FakeColl:
+    """Collection stand-in: objects + nested children for scope walks."""
+
+    def __init__(self, name):
+        self.name = name
+        self.objects = FakeObjCollection()
+        self.children = []
+
+
 class FakeObjCollection:
     def __init__(self):
         self._items = {}
@@ -308,6 +317,7 @@ bpy.types.Panel = type("Panel", (), {})
 bpy.types.Operator = type("Operator", (), {})
 bpy.types.Scene = type("Scene", (), {})
 bpy.types.Object = type("Object", (), {})
+bpy.types.Collection = type("Collection", (), {})
 
 # prop factories return the declared default -> class attrs behave like real props
 PROP_KW = {}
@@ -355,7 +365,8 @@ bpy.ops = types.SimpleNamespace(
 
 _scene = FakeScene()
 bpy.data = types.SimpleNamespace(objects=db,
-                                 cameras=types.SimpleNamespace(new=FakeCamData))
+                                 cameras=types.SimpleNamespace(new=FakeCamData),
+                                 collections=types.SimpleNamespace(new=FakeColl))
 bpy.context = types.SimpleNamespace(scene=_scene, active_object=None)
 
 for mod in (bpy, bpy.types, bpy.props, bpy.utils, bpy.app, mathutils):
@@ -424,8 +435,7 @@ check("timing props retime the rig live",
           for n in ("Frames", "Rounds", "Dir")))
 check("placement props move the camera live",
       all(PROP_KW[n].get("update") is ns["_update_rig_placement"]
-          for n in ("Radius", "Margin", "Height", "Auto Clip")))
-check("auto_clip default on", KR_SceneSettings.auto_clip is True)
+          for n in ("Radius", "Margin", "Height")))
 
 # ---------------------------------------------------------------- scene glue
 def fresh_props(target=None):
@@ -468,21 +478,25 @@ check("angle CW negative", ns["turn_end_angle"](1.0, 'CW') == -TAU)
 check("angle CW 2.5 rounds", ns["turn_end_angle"](2.5, 'CW') == -2.5 * TAU)
 
 cube = FakeObj('MESH')
-center = ns["bbox_center_world"](cube)
-check("bbox center at origin",
+center, dims = ns["combined_bounds"]([cube])
+check("bounds center at origin",
       (center.x, center.y, center.z) == (0.0, 0.0, 0.0), str(center))
+check("bounds dims of 2m cube", tuple(dims.xyz) == (2.0, 2.0, 2.0), str(dims))
 cube.matrix_world = FakeMatrix((5.0, 0.0, 2.0))
-center = ns["bbox_center_world"](cube)
-check("bbox center follows matrix", (center.x, center.y, center.z) == (5.0, 0.0, 2.0),
+center = ns["combined_bounds"]([cube])[0]
+check("bounds center follows matrix", (center.x, center.y, center.z) == (5.0, 0.0, 2.0),
       str(center))
+other = FakeObj('MESH')
+other.matrix_world = FakeMatrix((7.0, 0.0, 2.0))
+center, dims = ns["combined_bounds"]([cube, other])
+check("bounds combines objects",
+      (center.x, center.y, center.z) == (6.0, 0.0, 2.0)
+      and tuple(dims.xyz) == (4.0, 2.0, 2.0), (str(center), str(dims)))
 
-cube.dimensions = FakeVec((2.0, 2.0, 2.0))
-check("auto radius 2m cube x1.5 -> 3.0", ns["auto_radius"](cube, 1.5) == 3.0)
-check("auto radius default margin 2.5 -> 5.0", ns["auto_radius"](cube, 2.5) == 5.0)
-cube.dimensions = FakeVec((1.0, 4.0, 2.0))
-check("auto radius max dim x2.5", ns["auto_radius"](cube, 2.5) == 10.0)
-cube.dimensions = FakeVec((0.0, 0.0, 0.0))
-check("auto radius zero dims fallback", ns["auto_radius"](cube, 2.5) == ns["DEFAULT_RADIUS"])
+check("auto radius 2m cube x1.5 -> 3.0", ns["auto_radius"](FakeVec((2.0, 2.0, 2.0)), 1.5) == 3.0)
+check("auto radius default margin 2.5 -> 5.0", ns["auto_radius"](FakeVec((2.0, 2.0, 2.0)), 2.5) == 5.0)
+check("auto radius max dim x2.5", ns["auto_radius"](FakeVec((1.0, 4.0, 2.0)), 2.5) == 10.0)
+check("auto radius zero dims fallback", ns["auto_radius"](FakeVec((0.0, 0.0, 0.0)), 2.5) == ns["DEFAULT_RADIUS"])
 
 # ---------------------------------------------------------------- create rig
 reset()
@@ -506,11 +520,11 @@ check("camera created", cam is not None and cam.type == 'CAMERA')
 check("camera marked", cam.get("karuselka") == 1)
 check("camera lens 50", cam.data.lens == 50.0)
 check("camera dof off", cam.data.dof.use_dof is False)
-check("clips sized to orbit", cam.data.clip_start == 0.05
-      and cam.data.clip_end == 50.0,
+check("clips are Blender defaults", cam.data.clip_start == 0.1
+      and cam.data.clip_end == 100.0,
       (cam.data.clip_start, cam.data.clip_end))
-check("panel clips synced to computed", props.clip_start == 0.05
-      and props.clip_end == 50.0)
+check("panel clips synced", props.clip_start == 0.1
+      and props.clip_end == 100.0)
 check("scene.camera set to rig camera", _scene.camera is cam)
 check("prev_camera empty (scene had none)", props.get("prev_camera") == "")
 check("camera parented to pivot", cam.parent is pivot)
@@ -657,15 +671,14 @@ op.execute(bpy.context)          # rebuild: inherit from previous camera
 cam = db.get("Karuselka Cam")
 check("keep: lens inherited", cam.data.lens == 85.0, str(cam.data.lens))
 check("keep: clips inherited", cam.data.clip_start == 0.2, str(cam.data.clip_start))
-check("keep: clips become manual", props.auto_clip is False)
 props.keep_settings = False
 op.execute(bpy.context)          # rebuild: back to defaults
 cam = db.get("Karuselka Cam")
 check("no-keep: lens back to default", cam.data.lens == 50.0, str(cam.data.lens))
-check("no-keep: clips recomputed", abs(cam.data.clip_start - 0.05) < 1e-6,
+check("no-keep: clips back to default", abs(cam.data.clip_start - 0.1) < 1e-6,
       str(cam.data.clip_start))
 check("no-keep: panel fields synced", props.lens == 50.0
-      and abs(props.clip_start - 0.05) < 1e-6)
+      and abs(props.clip_start - 0.1) < 1e-6)
 
 # panel "apply" callback pushes settings into the rig camera
 props.lens = 85.0
@@ -700,7 +713,6 @@ props.frames, props.rounds = 120, 1.0
 ns["_update_rig_timing"](props, bpy.context)
 
 # placement edits move the rig camera live (orbit: pivot-local)
-props.auto_clip = True
 props.radius = 7.0
 ns["_update_rig_placement"](props, bpy.context)
 check("placement: radius moves camera", tuple(cam.location) == (7.0, 0.0, 0.0),
@@ -709,17 +721,10 @@ props.height = 1.5
 ns["_update_rig_placement"](props, bpy.context)
 check("placement: height raises camera",
       tuple(cam.location) == (7.0, 0.0, 1.5), str(tuple(cam.location)))
-check("placement: auto clips follow radius",
-      abs(cam.data.clip_start - 0.07) < 1e-6
-      and abs(cam.data.clip_end - 70.0) < 1e-6,
-      (cam.data.clip_start, cam.data.clip_end))
-props.auto_clip = False
 props.radius = 0.0
 ns["_update_rig_placement"](props, bpy.context)
 check("placement: margin fallback radius", tuple(cam.location) == (5.0, 0.0, 1.5),
       str(tuple(cam.location)))
-check("placement: manual clips untouched",
-      abs(cam.data.clip_start - 0.07) < 1e-6, str(cam.data.clip_start))
 props.target = None
 props.height = 2.0
 ns["_update_rig_placement"](props, bpy.context)
@@ -803,6 +808,39 @@ op_rm.report = lambda t, m: None
 op_rm.execute(bpy.context)
 check("spin+parent: root freed on remove", par.parent is None)
 check("spin+parent: target still under its parent", target.parent is par)
+
+# ---------------------------------------------------------------- assembly scope
+reset()
+part_a = make_target("PartA")
+part_b = make_target("PartB", translation=(6.0, 0.0, 0.0))
+coll = FakeColl("Asm")
+coll.objects.link(part_a)
+coll.objects.link(part_b)
+props = fresh_props()
+props.collection = coll
+props.mode = 'OBJECT_SPIN'
+op = ns["KR_OT_create_rig"]()
+op.report = lambda t, m: None
+rv = op.execute(bpy.context)
+check("assembly create FINISHED", rv == {'FINISHED'})
+spin = db.get("KARUSELKA_Empty")
+check("assembly: spin at combined center",
+      spin is not None
+      and tuple(round(v, 3) for v in spin.location.xyz) == (3.0, 0.0, 0.0),
+      str(spin.location.xyz))
+check("assembly: both roots parented",
+      part_a.parent is spin and part_b.parent is spin)
+cam = db.get("Karuselka Cam")
+check("assembly: camera aims at spin",
+      cam is not None and cam.constraints[0].target is spin)
+props.radius = 7.0
+ns["_update_rig_placement"](props, bpy.context)
+check("assembly: placement moves in world",
+      tuple(cam.location) == (10.0, 0.0, 0.0), str(tuple(cam.location)))
+op_rm = ns["KR_OT_remove_rig"]()
+op_rm.report = lambda t, m: None
+op_rm.execute(bpy.context)
+check("assembly: roots freed", part_a.parent is None and part_b.parent is None)
 
 # ---------------------------------------------------------------- render
 reset()

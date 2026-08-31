@@ -70,9 +70,8 @@ check("scene.camera is the rig camera", scene.camera is cam,
       scene.camera.name if scene.camera else None)
 check("previous active camera remembered", props.get("prev_camera") == "Camera",
       props.get("prev_camera"))
-check("clips sized to orbit (1000:1)",
-      abs(cam.data.clip_start - 0.05) < 1e-6
-      and abs(cam.data.clip_end - 50.0) < 1e-6, (cam.data.clip_start, cam.data.clip_end))
+check("clips are Blender defaults", abs(cam.data.clip_start - 0.1) < 1e-6
+      and abs(cam.data.clip_end - 100.0) < 1e-6, (cam.data.clip_start, cam.data.clip_end))
 
 fc = mod._action_fcurves(pivot.animation_data.action).find("rotation_euler", index=2)
 check("z fcurve 2 keys", fc is not None and len(fc.keyframe_points) == 2)
@@ -130,7 +129,6 @@ bpy.context.view_layer.update()
 check("placement: height moves camera live",
       abs(cam.matrix_world.translation.z - 1.5) < 1e-5,
       round(cam.matrix_world.translation.z, 3))
-props.auto_clip = False
 props.radius = 0.0
 props.height = 0.0
 
@@ -257,6 +255,39 @@ props.lens = 65.0
 check("panel lens edit -> live camera",
       bpy.data.objects["Karuselka Cam"].data.lens == 65.0)
 bpy.ops.karuselka.remove_rig()
+
+# ---------------------------------------------------------------- assembly
+coll = bpy.data.collections.new("KarAssembly")
+scene.collection.children.link(coll)
+mesh = bpy.data.meshes.new("AsmMesh")
+part = bpy.data.objects.new("AsmPart", mesh)
+part.location = (9.0, 0.0, 0.0)
+coll.objects.link(part)
+coll.objects.link(target)
+props.collection = coll
+props.mode = 'OBJECT_SPIN'
+props.camera = None
+r = bpy.ops.karuselka.create_rig()
+spin = bpy.data.objects.get("KARUSELKA_Empty")
+check("assembly: spin created", r == {'FINISHED'} and spin is not None)
+lo = [1e9] * 3
+hi = [-1e9] * 3
+for ob in (target, part):
+    for c in ob.bound_box:
+        w = ob.matrix_world @ mathutils.Vector(c)
+        lo = [min(a, b) for a, b in zip(lo, w)]
+        hi = [max(a, b) for a, b in zip(hi, w)]
+cx = (lo[0] + hi[0]) / 2.0
+check("assembly: spin at combined center",
+      spin is not None and abs(spin.location.x - cx) < 1e-5,
+      (round(spin.location.x, 4), round(cx, 4)))
+check("assembly: roots parented",
+      target.parent is spin and part.parent is spin)
+bpy.ops.karuselka.remove_rig()
+check("assembly: roots freed", target.parent is None and part.parent is None)
+bpy.data.collections.remove(coll)
+props.collection = None
+props.mode = 'CAMERA_ORBIT'
 
 mod.unregister()
 check("unregister ok", not hasattr(bpy.types.Scene, "karuselka"))
