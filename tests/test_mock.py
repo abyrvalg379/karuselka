@@ -59,6 +59,9 @@ class FakeVec:
     def __sub__(self, o):
         return FakeVec([a - b for a, b in zip(self.xyz, FakeVec(o).xyz)])
 
+    def __neg__(self):
+        return FakeVec([-a for a in self.xyz])
+
     def __mul__(self, s):
         return FakeVec([a * s for a in self.xyz])
 
@@ -90,6 +93,10 @@ class FakeMatrix:
 
     def inverted(self):
         return FakeMatrix([-v for v in self.t.xyz])
+
+    @staticmethod
+    def Translation(vec):
+        return FakeMatrix(vec)
 
     def __eq__(self, other):
         return isinstance(other, FakeMatrix) and self.t.xyz == other.t.xyz
@@ -713,6 +720,12 @@ check("placement: margin fallback radius", tuple(cam.location) == (5.0, 0.0, 1.5
       str(tuple(cam.location)))
 check("placement: manual clips untouched",
       abs(cam.data.clip_start - 0.07) < 1e-6, str(cam.data.clip_start))
+props.target = None
+props.height = 2.0
+ns["_update_rig_placement"](props, bpy.context)
+check("placement: works without target (last radius)",
+      tuple(cam.location) == (5.0, 0.0, 2.0), str(tuple(cam.location)))
+props.target = target
 props.height = 0.0
 ns["_update_rig_placement"](props, bpy.context)
 
@@ -741,7 +754,8 @@ check("spin at bbox center", spin.location.xyz == (3.0, -1.0, 2.0),
       str(spin.location))
 check("target parented to spin", target.parent is spin)
 check("target world kept via parent_inverse",
-      target.matrix_parent_inverse == spin.matrix_world.inverted())
+      target.matrix_parent_inverse.t.xyz == (-3.0, 1.0, -2.0),
+      str(target.matrix_parent_inverse.t))
 check("no pivot in spin mode", db.get("Karuselka Pivot") is None)
 cam = db.get("Karuselka Cam")
 check("spin camera is static (unparented)", cam.parent is None)

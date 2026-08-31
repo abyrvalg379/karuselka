@@ -1,7 +1,7 @@
 bl_info = {
     "name": "KARUSELKA",
     "author": "Maksim Kovalev",
-    "version": (1, 1, 4),
+    "version": (1, 1, 5),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar (N) > KARUSELKA",
     "description": "Turntable rig: camera orbit or object spin, linear keyframes + animation render",
@@ -152,8 +152,6 @@ def _remove_rig_objects(context):
             if (con.type == 'TRACK_TO' and con.name == TRACK_NAME
                     and any(con.target == e for e in empties)):
                 user_cam.constraints.remove(con)
-        if user_cam.parent in empties:
-            _clear_parent_keep_transform(user_cam)
 
     removed = bool(empties)
     for cam in find_own_cameras(scene):
@@ -209,10 +207,15 @@ def _update_rig_placement(self, context):
     if props is None or scene is None or cam is None or cam.type != 'CAMERA':
         return
     empties = find_marked_empties(scene)
-    if not empties or props.target is None:
+    if not empties:
         return
-    radius = (props.radius if props.radius > 0.0
-              else auto_radius(props.target, props.margin))
+    if props.radius > 0.0:
+        radius = props.radius
+    elif props.target is not None:
+        radius = auto_radius(props.target, props.margin)
+    else:
+        # target cleared/deleted — fall back to the radius used at create
+        radius = props.get("last_radius", 0.0) or DEFAULT_RADIUS
     center = empties[0].location    # pivot/spin sits at the rotation center
     if cam.parent is not None:      # orbit: location is pivot-local
         cam.location = (radius, 0.0, props.height)
@@ -386,6 +389,7 @@ class KR_OT_create_rig(Operator):
 
         radius = props.radius if props.radius > 0.0 else auto_radius(target,
                                                                     props.margin)
+        props["last_radius"] = radius    # placement fallback if target goes away
         center = bbox_center_world(target)
 
         if prev is not None:
@@ -416,7 +420,9 @@ class KR_OT_create_rig(Operator):
             rot_obj.location = center
 
             root.parent = rot_obj
-            root.matrix_parent_inverse = rot_obj.matrix_world.inverted()
+            # exact inverse without depending on depsgraph-evaluated
+            # matrix_world of the freshly created empty (it is stale here)
+            root.matrix_parent_inverse = Matrix.Translation(-center)
 
             cam = props.camera
             if cam is None:

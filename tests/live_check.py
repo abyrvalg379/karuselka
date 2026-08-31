@@ -180,6 +180,8 @@ check("scene.camera restored to the original",
 scene.frame_set(1)
 props.mode = 'OBJECT_SPIN'
 props.camera = None
+target.location = (4.0, -2.0, 1.0)   # off-origin: catches stale-matrix jumps
+bpy.context.view_layer.update()
 before = target.matrix_world.translation.copy()
 r = bpy.ops.karuselka.create_rig()
 check("spin create FINISHED", r == {'FINISHED'}, r)
