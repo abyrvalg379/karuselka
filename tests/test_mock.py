@@ -142,6 +142,7 @@ class FakeObj:
                           (-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)]
         self.dimensions = FakeVec((2.0, 2.0, 2.0))
         self.parent = None
+        self.matrix_parent_inverse = FakeMatrix()
         self.constraints = FakeConstraints()
         self.empty_display_type = 'PLAIN_AXES'
         self._anim = None
@@ -307,6 +308,7 @@ bpy.props.PointerProperty = _pointer
 bpy.app = types.ModuleType("bpy.app")
 mathutils = types.ModuleType("mathutils")
 mathutils.Vector = FakeVec
+mathutils.Matrix = FakeMatrix
 
 render_calls = []
 bpy.ops = types.SimpleNamespace(
@@ -473,6 +475,11 @@ if fc and len(fc.keyframe_points) == 2:
           str((k1.interpolation, k2.interpolation)))
 check("has_rig flag set", props.get("has_rig") == 1)
 check("create leaves scene frame range alone", _scene.frame_end == 250)
+check("create jumps to frame 1 (start of the rig)", _scene.frame_set_calls == [1],
+      str(_scene.frame_set_calls))
+check("parent_inverse reset to identity",
+      cam.matrix_parent_inverse.t.xyz == (0.0, 0.0, 0.0),
+      str(cam.matrix_parent_inverse.t))
 
 # ---------------------------------------------------------------- no target
 reset()
@@ -495,6 +502,8 @@ target = make_target()
 user_cam = db.new("User Cam", FakeCamData("User Cam"))
 user_cam.data.lens = 85.0
 user_cam.constraints.new('TRACK_TO').name = "Old Track"
+user_cam.parent = db.new("Old Parent", None)          # UI-style old parenting
+user_cam.matrix_parent_inverse = FakeMatrix((40.0, -25.0, 12.0))  # stale inverse
 _scene.collection.objects.link(user_cam)
 props = fresh_props(target)
 props.camera = user_cam
@@ -509,6 +518,9 @@ check("no extra camera created",
 check("user camera NOT marked", user_cam.get("karuselka") is None)
 pivot = db.get("Karuselka Pivot")
 check("user camera parented to pivot", user_cam.parent is pivot)
+check("user camera stale parent_inverse reset",
+      user_cam.matrix_parent_inverse.t.xyz == (0.0, 0.0, 0.0),
+      str(user_cam.matrix_parent_inverse.t))
 check("user camera placed at radius/height",
       tuple(user_cam.location) == (3.0, 0.0, 0.0), str(tuple(user_cam.location)))
 check("user camera lens untouched", user_cam.data.lens == 85.0)

@@ -106,6 +106,26 @@ check("user cam survives remove", user_cam.name in bpy.data.objects
       and user_cam.parent is None
       and not any(x.name == "Karuselka Track" for x in user_cam.constraints))
 
+# regression: create at frame != 1 used to leave the camera mid-orbit
+# (e.g. at frame 60 it spawned behind the object and looked "random")
+scene.frame_set(60)
+props.camera = None
+bpy.ops.karuselka.create_rig()
+check("create jumps playhead to frame 1", scene.frame_current == 1,
+      scene.frame_current)
+cam2 = bpy.data.objects.get("Karuselka Cam")
+check("camera starts at +X side of the object",
+      cam2 is not None and cam2.matrix_world.translation.x > 2.9
+      and abs(cam2.matrix_world.translation.y) < 1e-3,
+      tuple(round(v, 3) for v in cam2.matrix_world.translation))
+check("stale parent_inverse reset",
+      cam2.matrix_parent_inverse == mathutils.Matrix()
+      or tuple(cam2.matrix_parent_inverse.translation) == (0.0, 0.0, 0.0))
+bpy.ops.karuselka.remove_rig()
+check("scene cleaned again",
+      bpy.data.objects.get("Karuselka Pivot") is None
+      and bpy.data.objects.get("Karuselka Cam") is None)
+
 mod.unregister()
 check("unregister ok", not hasattr(bpy.types.Scene, "karuselka"))
 

@@ -18,7 +18,7 @@ bl_info = {
 import math
 
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 from bpy.props import (
     IntProperty,
     FloatProperty,
@@ -240,6 +240,9 @@ class KR_OT_create_rig(Operator):
 
         # orbit from parenting, aiming from the constraint — no doubled rotation
         cam.parent = pivot
+        # a camera parented earlier (UI or another rig) keeps a stale
+        # matrix_parent_inverse — that drags it to a random spot on 3.6–4.x
+        cam.matrix_parent_inverse = Matrix()
         radius = props.radius if props.radius > 0.0 else auto_radius(target)
         cam.location = (radius, 0.0, props.height)
 
@@ -261,7 +264,10 @@ class KR_OT_create_rig(Operator):
         _force_linear(pivot)
 
         props["has_rig"] = 1
-        self.report({'INFO'}, f"Turntable rig ready: frames 1..{end_f}")
+        # show the rig from its start: at any other frame the camera sits
+        # at that frame's orbit angle and looks like it spawned "randomly"
+        context.scene.frame_set(1)
+        self.report({'INFO'}, f"Turntable rig ready: {target.name}, frames 1..{end_f}")
         return {'FINISHED'}
 
 
