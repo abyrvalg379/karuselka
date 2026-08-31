@@ -453,8 +453,8 @@ check("camera created", cam is not None and cam.type == 'CAMERA')
 check("camera marked", cam.get("karuselka") == 1)
 check("camera lens 50", cam.data.lens == 50.0)
 check("camera dof off", cam.data.dof.use_dof is False)
-check("clips sized to orbit", cam.data.clip_start == 0.003
-      and cam.data.clip_end == 100.0,
+check("clips sized to orbit", cam.data.clip_start == 0.03
+      and cam.data.clip_end == 30.0,
       (cam.data.clip_start, cam.data.clip_end))
 check("scene.camera set to rig camera", _scene.camera is cam)
 check("prev_camera empty (scene had none)", props.get("prev_camera") == "")

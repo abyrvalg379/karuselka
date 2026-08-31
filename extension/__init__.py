@@ -230,11 +230,11 @@ class KR_OT_create_rig(Operator):
             cam_data = bpy.data.cameras.new(CAM_NAME)
             cam_data.lens = 50.0
             cam_data.dof.use_dof = False
-            # clips sized to the orbit: on a tiny model the default near
-            # plane (0.1) sits past the object, on a huge one the object is
-            # past the far plane (100) — both look like an empty camera view
-            cam_data.clip_start = min(0.1, max(0.001, radius * 0.001))
-            cam_data.clip_end = max(100.0, radius * 10.0)
+            # clips hug the orbit with a fixed 1000:1 ratio: tiny models stay
+            # outside the near plane, huge ones inside the far plane, and the
+            # depth buffer never runs out of precision
+            cam_data.clip_start = radius / 100.0
+            cam_data.clip_end = radius * 10.0
             cam = bpy.data.objects.new(CAM_NAME, cam_data)
             context.scene.collection.objects.link(cam)
             cam[MARKER] = 1

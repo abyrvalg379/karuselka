@@ -67,8 +67,9 @@ check("scene.camera is the rig camera", scene.camera is cam,
       scene.camera.name if scene.camera else None)
 check("previous active camera remembered", props.get("prev_camera") == "Camera",
       props.get("prev_camera"))
-check("clips sized to orbit", abs(cam.data.clip_start - 0.003) < 1e-6
-      and cam.data.clip_end == 100.0, (cam.data.clip_start, cam.data.clip_end))
+check("clips sized to orbit (1000:1)",
+      abs(cam.data.clip_start - 0.03) < 1e-6
+      and abs(cam.data.clip_end - 30.0) < 1e-6, (cam.data.clip_start, cam.data.clip_end))
 
 fc = mod._action_fcurves(pivot.animation_data.action).find("rotation_euler", index=2)
 check("z fcurve 2 keys", fc is not None and len(fc.keyframe_points) == 2)
