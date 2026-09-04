@@ -1,6 +1,16 @@
 # KARUSELKA
 
-Fast camera turntable rig for Blender. Pick an object, press **Create Rig** —
+![KARUSELKA](screen/karuselka_panel.png)
+
+*Readme in Russian: [README_ru.md](README_ru.md)*
+
+Fast camera turntable rig for Blender 3.6+ / 4.2+ / 5.x. Pick an object, press **Create Rig** —
+a camera orbits it on linear keyframes, ready to scrub or render as a showreel
+turntable.
+
+**Blender 3.6+ / 4.2+ · Author: Maksim Kovalev**
+
+--- for Blender. Pick an object, press **Create Rig** —
 a camera orbits it on linear keyframes, ready to scrub or render as a showreel
 turntable.
 
