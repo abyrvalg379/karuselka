@@ -1,7 +1,5 @@
 # KARUSELKA
 
-![KARUSELKA](screen/karuselka_panel.png)
-
 *Readme in Russian: [README_ru.md](README_ru.md)*
 
 Fast camera turntable rig for Blender 3.6+ / 4.2+ / 5.x. Pick an object, press **Create Rig** —

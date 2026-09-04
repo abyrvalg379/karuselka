@@ -1,7 +1,5 @@
 # KARUSELKA
 
-![KARUSELKA](screen/karuselka_panel.png)
-
 *Readme in English: [README.md](README.md)*
 
 Быстрый турнтейбл-риг для Blender 3.6+ / 4.2+ / 5.x. Выберите объект, нажмите **Create Rig** —
