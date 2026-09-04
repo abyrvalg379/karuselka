@@ -6,6 +6,9 @@
 import math
 import os
 import re
+import json
+import getpass
+import datetime
 
 import bpy
 from mathutils import Matrix, Vector
@@ -17,7 +20,7 @@ from bpy.props import (
     StringProperty,
     PointerProperty,
 )
-from bpy.types import Operator, Panel, PropertyGroup
+from bpy.types import AddonPreferences, Operator, Panel, PropertyGroup
 
 PIVOT_NAME = "Karuselka Pivot"
 SPIN_NAME = "KARUSELKA_Empty"
@@ -216,8 +219,11 @@ def _update_rig_timing(self, context):
     if fc is None or not fc.keyframe_points:
         return
     end_f = turn_end_frame(props.frames, props.rounds)
+    start_rad = props.start_angle
+    fc.keyframe_points[0].co = (1.0, start_rad)
     fc.keyframe_points[-1].co = (float(end_f),
-                                 turn_end_angle(props.rounds, props.direction))
+                                 start_rad + turn_end_angle(props.rounds,
+                                                            props.direction))
     for kp in fc.keyframe_points:
         kp.interpolation = 'LINEAR'
     fc.update()
@@ -287,6 +293,102 @@ def _update_rig_center(self, context):
     if cam is not None and cam.type == 'CAMERA' and cam.parent is None:
         cam.location = new_center + Vector((_effective_radius(props),
                                             0.0, props.height))
+
+
+def _poll_camera(_self, obj):
+    return obj.type == 'CAMERA'
+
+
+# ---------------------------------------------------------------------------
+#  Shot presets — built-in camera setups + user JSON folder
+# ---------------------------------------------------------------------------
+
+_BUILTIN_SHOT_PRESETS = {
+    'FRONT': {"start_angle": -90.0, "height_ratio": 0.0},
+    'THREE_QUARTER': {"start_angle": -45.0, "height_ratio": 0.35},
+    'TOP': {"start_angle": 0.0, "height_ratio": 1.0},
+    'HERO': {"start_angle": -90.0, "height_ratio": -0.45},
+}
+_BUILTIN_SHOT_ORDER = ('FRONT', 'THREE_QUARTER', 'TOP', 'HERO')
+_BUILTIN_SHOT_LABELS = {
+    'FRONT': "Front",
+    'THREE_QUARTER': "3/4",
+    'TOP': "Top",
+    'HERO': "Hero",
+}
+
+USER_PRESET_EXTENSIONS = ('.json',)
+_user_preset_cache = []
+_user_preset_cache_folder = None
+
+
+def user_preset_enum_items(self, context):
+    """Dynamic enum of .json presets from the preferences folder."""
+    global _user_preset_cache_folder
+    folder = ""
+    if context is not None and hasattr(context, "preferences"):
+        prefs = context.preferences.addons.get(__package__)
+        if prefs is not None:
+            folder = getattr(prefs, "presets_folder", "")
+
+    if _user_preset_cache_folder == folder and _user_preset_cache:
+        return _user_preset_cache
+
+    _user_preset_cache.clear()
+    _user_preset_cache_folder = folder
+
+    if not folder or not os.path.isdir(folder):
+        return _user_preset_cache
+
+    try:
+        files = sorted(f for f in os.listdir(folder)
+                       if f.lower().endswith(USER_PRESET_EXTENSIONS))
+    except OSError:
+        return _user_preset_cache
+
+    for filename in files:
+        filepath = os.path.join(folder, filename)
+        name = os.path.splitext(filename)[0]
+        _user_preset_cache.append(
+            (filepath, name, name, len(_user_preset_cache)))
+
+    return _user_preset_cache
+
+
+class KR_Preferences(AddonPreferences):
+    bl_idname = __package__
+
+    presets_folder: StringProperty(
+        name="Presets Folder",
+        subtype='DIR_PATH',
+        description="Folder with .json shot presets; picked up live",
+        update=lambda self, context: _clear_user_preset_cache(),
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "presets_folder")
+
+
+def _clear_user_preset_cache():
+    global _user_preset_cache_folder
+    _user_preset_cache_folder = None
+
+
+def _apply_shot_preset_values(props, spec):
+    """Apply a preset spec dict (degrees, height_ratio) to the rig props."""
+    if "start_angle" in spec:
+        props.start_angle = math.radians(float(spec["start_angle"]))
+    if "height_ratio" in spec:
+        props.height = round(_effective_radius(props)
+                             * float(spec["height_ratio"]), 3)
+    for key in ("mode", "center", "radius", "margin", "direction",
+                "rounds", "frames", "lens", "use_dof"):
+        if key in spec:
+            try:
+                setattr(props, key, spec[key])
+            except Exception:
+                pass
 
 
 def _poll_camera(_self, obj):
@@ -432,6 +534,14 @@ class KR_SceneSettings(PropertyGroup):
         default='CW',
         update=_update_rig_timing,
     )
+    start_angle: FloatProperty(
+        name="Start Angle",
+        description="Orbit angle at frame 1 (0 = camera on the +X side, "
+                    "-90 = on the front side)",
+        default=0.0,
+        subtype='ANGLE',
+        update=_update_rig_timing,
+    )
     lens: FloatProperty(
         name="Lens",
         description="Focal length for the rig camera",
@@ -503,6 +613,15 @@ class KR_SceneSettings(PropertyGroup):
             ('WEBM', "WebM", "WebM video"),
         ),
         default='PNG',
+    )
+    user_preset: EnumProperty(
+        name="Preset",
+        items=user_preset_enum_items,
+        description="Shot presets (.json) from the preferences folder",
+    )
+    user_preset_name: StringProperty(
+        name="Name",
+        description="Name of the shot preset to save",
     )
     output: StringProperty(
         name="Output",
@@ -576,6 +695,7 @@ class KR_OT_create_rig(Operator):
 
         end_f = turn_end_frame(props.frames, props.rounds)
         angle = turn_end_angle(props.rounds, props.direction)
+        start_rad = props.start_angle
 
         if props.mode == 'OBJECT_SPIN':
             # rotate the hierarchy roots of the whole scope: an object with
@@ -638,9 +758,9 @@ class KR_OT_create_rig(Operator):
         cam.data.clip_start = cs
         cam.data.clip_end = ce
 
-        rot_obj.rotation_euler = (0.0, 0.0, 0.0)
+        rot_obj.rotation_euler = (0.0, 0.0, start_rad)
         rot_obj.keyframe_insert(data_path="rotation_euler", frame=1)
-        rot_obj.rotation_euler = (0.0, 0.0, angle)
+        rot_obj.rotation_euler = (0.0, 0.0, start_rad + angle)
         rot_obj.keyframe_insert(data_path="rotation_euler", frame=end_f)
         _force_linear(rot_obj)
 
@@ -741,6 +861,116 @@ class KR_OT_render_turntable(Operator):
         return {'FINISHED'}
 
 
+class KR_OT_shot_preset(Operator):
+    """Apply a built-in shot setup to the rig (or pre-configure it)."""
+    bl_idname = "karuselka.shot_preset"
+    bl_label = "Shot Preset"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    preset: EnumProperty(
+        name="Preset",
+        items=[(key, _BUILTIN_SHOT_LABELS[key],
+                "Start at {}°, height {:.2f} of the orbit radius".format(
+                    _BUILTIN_SHOT_PRESETS[key]["start_angle"],
+                    _BUILTIN_SHOT_PRESETS[key]["height_ratio"]))
+               for key in _BUILTIN_SHOT_ORDER],
+        default='FRONT',
+    )
+
+    def execute(self, context):
+        props = context.scene.karuselka
+        _apply_shot_preset_values(props, _BUILTIN_SHOT_PRESETS[self.preset])
+        self.report({'INFO'}, "Shot preset: "
+                    + _BUILTIN_SHOT_LABELS[self.preset])
+        return {'FINISHED'}
+
+
+class KR_OT_user_preset_apply(Operator):
+    """Apply a .json shot preset from the preferences folder."""
+    bl_idname = "karuselka.user_preset_apply"
+    bl_label = "Apply Preset"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.scene.karuselka.user_preset)
+
+    def execute(self, context):
+        props = context.scene.karuselka
+        filepath = props.user_preset
+        if not filepath or not os.path.isfile(filepath):
+            self.report({'ERROR'}, "No valid preset selected")
+            return {'CANCELLED'}
+        try:
+            with open(filepath, encoding="utf-8") as fh:
+                manifest = json.load(fh)
+        except (OSError, ValueError) as ex:
+            self.report({'ERROR'}, f"Bad preset file: {ex}")
+            return {'CANCELLED'}
+        preset = manifest.get("preset") if isinstance(manifest, dict) else None
+        if not isinstance(preset, dict) or not preset:
+            self.report({'ERROR'}, "No preset data in the file")
+            return {'CANCELLED'}
+        _apply_shot_preset_values(props, preset)
+        _clear_user_preset_cache()
+        self.report({'INFO'}, "Preset applied: "
+                    + os.path.basename(filepath))
+        return {'FINISHED'}
+
+
+class KR_OT_preset_save(Operator):
+    """Save the current rig settings as a .json shot preset."""
+    bl_idname = "karuselka.preset_save"
+    bl_label = "Save Preset"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences.addons.get(__package__)
+        if prefs is None or not getattr(prefs, "presets_folder", ""):
+            return False
+        return bool(context.scene.karuselka.user_preset_name.strip())
+
+    def execute(self, context):
+        props = context.scene.karuselka
+        prefs = context.preferences.addons.get(__package__)
+        folder = prefs.presets_folder
+        name = props.user_preset_name.strip()
+        preset = {
+            "mode": props.mode,
+            "center": props.center,
+            "start_angle": round(math.degrees(props.start_angle), 3),
+            "radius": props.radius,
+            "margin": props.margin,
+            "height": props.height,
+            "direction": props.direction,
+            "rounds": props.rounds,
+            "frames": props.frames,
+            "lens": props.lens,
+            "use_dof": props.use_dof,
+        }
+        try:
+            author = getpass.getuser()
+        except Exception:
+            author = ""
+        manifest = {
+            "version": 1,
+            "app": "KARUSELKA 1.4",
+            "author": author,
+            "created": datetime.datetime.now().isoformat(timespec="seconds"),
+            "preset": preset,
+        }
+        filepath = os.path.join(folder, _safe_filename(name) + ".json")
+        overwritten = os.path.isfile(filepath)
+        with open(filepath, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, ensure_ascii=False, indent=2)
+        props.user_preset_name = ""
+        _clear_user_preset_cache()
+        self.report({'INFO'}, "Saved: " + os.path.basename(filepath)
+                    + (" (overwritten)" if overwritten else ""))
+        return {'FINISHED'}
+
+
 # ---------------------------------------------------------------------------
 #  Panel
 # ---------------------------------------------------------------------------
@@ -784,6 +1014,17 @@ class KR_PT_main_panel(Panel):
         row.prop(props, "clip_end")
         col.prop(props, "keep_settings")
         col.separator()
+        col.label(text="Shot presets:")
+        row = col.row(align=True)
+        for key in _BUILTIN_SHOT_ORDER:
+            row.operator("karuselka.shot_preset",
+                         text=_BUILTIN_SHOT_LABELS[key]).preset = key
+        col.prop(props, "user_preset")
+        col.operator("karuselka.user_preset_apply", icon='CHECKMARK')
+        row = col.row(align=True)
+        row.prop(props, "user_preset_name", text="")
+        row.operator("karuselka.preset_save", text="", icon='EXPORT')
+        col.separator()
         col.label(text="Output:")
         col.prop(props, "resolution")
         col.prop(props, "samples")
@@ -805,10 +1046,14 @@ class KR_PT_main_panel(Panel):
 # ---------------------------------------------------------------------------
 
 classes = (
+    KR_Preferences,
     KR_SceneSettings,
     KR_OT_create_rig,
     KR_OT_remove_rig,
     KR_OT_render_turntable,
+    KR_OT_shot_preset,
+    KR_OT_user_preset_apply,
+    KR_OT_preset_save,
     KR_PT_main_panel,
 )
 

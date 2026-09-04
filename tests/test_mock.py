@@ -5,6 +5,9 @@
 # removal, render operator.
 import os
 import sys
+import json
+import tempfile
+import shutil
 import types
 import math
 import traceback
@@ -327,6 +330,7 @@ bpy.types.Operator = type("Operator", (), {})
 bpy.types.Scene = type("Scene", (), {})
 bpy.types.Object = type("Object", (), {})
 bpy.types.Collection = type("Collection", (), {})
+bpy.types.AddonPreferences = type("AddonPreferences", (), {})
 
 # prop factories return the declared default -> class attrs behave like real props
 PROP_KW = {}
@@ -982,6 +986,92 @@ slotted = types.SimpleNamespace(layers=[types.SimpleNamespace(strips=[
 check("action fcurves: slotted branch", ns["_action_fcurves"](slotted) is bag.fcurves)
 check("action fcurves: empty slotted -> None",
       ns["_action_fcurves"](types.SimpleNamespace(layers=[])) is None)
+
+# ---------------------------------------------------------------- shot presets
+check("center/shot ops registered",
+      "KR_OT_shot_preset" in _registered and "KR_OT_preset_save" in _registered
+      and "KR_OT_user_preset_apply" in _registered)
+check("preferences class registered", "KR_Preferences" in _registered)
+check("start angle default 0", KR_SceneSettings.start_angle == 0.0)
+
+# built-in shot presets on the created rig (radius 5.0 auto)
+pivot = db.get("Karuselka Pivot")
+fc = z_fcurve(pivot)
+op_shot = ns["KR_OT_shot_preset"]()
+op_shot.report = lambda t, m: None
+op_shot.preset = 'FRONT'
+rv = op_shot.execute(bpy.context)
+ns["_update_rig_timing"](props, bpy.context)   # mock does not fire updates
+check("shot FRONT FINISHED", rv == {'FINISHED'})
+check("shot FRONT: start -90deg", abs(props.start_angle - math.radians(-90.0)) < 1e-6,
+      props.start_angle)
+check("shot FRONT: height 0", props.height == 0.0, props.height)
+check("shot FRONT: retimed keys with start",
+      tuple(fc.keyframe_points[0].co) == (1.0, -math.pi / 2)
+      and tuple(fc.keyframe_points[-1].co) == (120.0, -math.pi / 2 - TAU),
+      str([tuple(k.co) for k in fc.keyframe_points]))
+
+op_shot.preset = 'THREE_QUARTER'
+op_shot.execute(bpy.context)
+check("shot 3/4: start -45deg, height 1.75",
+      abs(props.start_angle - math.radians(-45.0)) < 1e-6
+      and abs(props.height - 1.75) < 1e-6, props.height)
+
+op_shot.preset = 'TOP'
+op_shot.execute(bpy.context)
+check("shot TOP: height = radius", abs(props.height - 5.0) < 1e-6, props.height)
+
+op_shot.preset = 'HERO'
+op_shot.execute(bpy.context)
+check("shot HERO: height below center",
+      abs(props.height + 2.25) < 1e-6, props.height)
+props.start_angle = 0.0
+props.height = 0.0
+
+# user presets: save/apply roundtrip via preferences folder
+tmp4 = tempfile.mkdtemp(prefix="karuselka_user_presets_")
+bpy.context.preferences = types.SimpleNamespace(addons={
+    "karuselka_test": types.SimpleNamespace(presets_folder=tmp4)})
+props.user_preset_name = "My Shot/A:1"
+op_save = ns["KR_OT_preset_save"]()
+op_save.report = lambda t, m: print("    report:", t, m)
+rv = op_save.execute(bpy.context)
+check("user preset save: FINISHED + sanitized name",
+      rv == {'FINISHED'} and os.path.isfile(os.path.join(tmp4, "My Shot_A_1.json")),
+      str(rv))
+
+saved = json.load(open(os.path.join(tmp4, "My Shot_A_1.json"), encoding="utf-8"))
+check("user preset save: manifest header",
+      saved.get("version") == 1 and "author" in saved and "created" in saved)
+check("user preset save: preset fields",
+      saved["preset"]["mode"] == 'CAMERA_ORBIT'
+      and saved["preset"]["frames"] == 120
+      and saved["preset"]["lens"] == 50.0)
+
+# apply roundtrip: change everything, then restore from the json
+props.mode = 'OBJECT_SPIN'
+props.start_angle = math.radians(30.0)
+props.frames = 60
+props.lens = 85.0
+op_apply = ns["KR_OT_user_preset_apply"]()
+op_apply.report = lambda t, m: print("    report:", t, m)
+presets_enum = ns["user_preset_enum_items"](props, bpy.context)
+check("user preset enum: file discovered", len(presets_enum) == 1
+      and presets_enum[0][0].endswith("My Shot_A_1.json"), str(presets_enum))
+props.user_preset = presets_enum[0][0]
+rv = op_apply.execute(bpy.context)
+check("user preset apply: FINISHED", rv == {'FINISHED'})
+check("user preset apply: values restored",
+      props.mode == 'CAMERA_ORBIT' and props.frames == 120
+      and abs(props.lens - 50.0) < 1e-6
+      and abs(props.start_angle) < 1e-6, (props.mode, props.frames, props.lens))
+check("user preset apply: rig retimed back to 120",
+      _scene.frame_end == 120)
+
+shutil.rmtree(tmp4, ignore_errors=True)
+
+
+
 
 # ---------------------------------------------------------------- unregister
 try:

@@ -305,6 +305,22 @@ check("cursor center: camera follows the pivot",
 bpy.ops.karuselka.remove_rig()
 props.center = 'BOUNDS'
 
+# start angle: frame 1 begins on the given side (front = -90 deg -> -Y)
+props.start_angle = math.radians(-90.0)
+bpy.ops.karuselka.create_rig()
+spin_f = bpy.data.objects.get("Karuselka Pivot")
+scene.frame_set(1)
+cw = props.camera.matrix_world.translation.copy()
+off = cw - spin_f.location
+check("start angle: orbit begins on the front side",
+      spin_f is not None and abs(off.x) < 1e-4 and off.y < -1.0,
+      (round(off.x, 3), round(off.y, 3)))
+scene.frame_set(60)
+check("start angle: orbit still spans a full turn",
+      (props.camera.matrix_world.translation - cw).length > 5.0)
+bpy.ops.karuselka.remove_rig()
+props.start_angle = 0.0
+
 mod.unregister()
 check("unregister ok", not hasattr(bpy.types.Scene, "karuselka"))
 

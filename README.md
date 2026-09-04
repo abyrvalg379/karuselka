@@ -33,7 +33,12 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
   right up against the model
 - Camera settings right in the panel: Lens, DoF, near/far clip (Blender
   defaults) — edits apply to the rig camera live
+- **Shot presets**: Front / Three-Quarter / Top / Hero (start angle + camera
+  height as a fraction of the orbit radius) — one click each
+- **User presets**: save the current rig setup as .json into a folder of
+  your choice (Preferences > Presets Folder), pick it up live from the panel
 - Radius/Margin/Height move the camera live too
+- **Start Angle**: where the orbit begins at frame 1 (Front = -90)
 - **Output presets**: Resolution (Square 1080 / 1080p / 1440p / 4K / 2048x858 / Scene),
   Samples (Draft / Normal / High / Scene) and Format (PNG frames / MP4 / WebM),
   applied on Render Turntable; the turntable is named `<asset>_turntable`
@@ -74,6 +79,8 @@ light preset + KARUSELKA turntable = model showcase in two minutes.
 | Frames | frames per full revolution; fps comes from the scene |
 | Rounds | revolutions, fractional allowed |
 | Center | rotation center: scope bounds middle or the 3D cursor |
+| Start Angle | orbit angle at frame 1 |
+| Shot presets | built-in one-click setups + user .json presets |
 | Resolution / Samples / Format | output presets; Scene = keep as is. 2048x858 in Resolution |
 | Radius | orbit distance; 0 = auto (scope size × Margin) |
 | Margin | auto-radius multiplier (default 2.5) |
